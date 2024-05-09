@@ -1,0 +1,195 @@
+1.程序包：
+  是属于数据库中的对象，将多个子程序（函数,存储过程,类型等等）封装到一起，作为一个整体保存到数据库中，在使用的时候直接将整个程序包
+  加载到内存中，来提高程序的执行效率以及方便程序管理。
+  
+  一个完整的程序包需要包含2部分内容：
+  1.程序包规范：package
+    规范主要就是对程序包的整体规划和设计，主要规定程序包中有一些什么子程序，包括子程序的名称，参数以及返回值进行声明。
+	创建规范：
+	  create [or replace] package 包名 
+	  is
+	  --声明函数
+	  --声明存储过程
+	  --声明类型
+	  --.......
+	  end [包名];
+  
+  
+    --创建一个程序包规范，程序包中有一个函数和一个存储过程
+	--函数：计算某一个部门的平均工资
+	--存储过程：查询指定员工的工资
+	CREATE OR REPLACE PACKAGE pack_emp
+	IS
+	--声明函数
+	FUNCTION fun_avg_sal(dno NUMBER) RETURN NUMBER;
+	--声明存储过程
+	PROCEDURE pro_sal(eno NUMBER,esal OUT NUMBER);
+	END pack_emp;
+	  
+	注意：只有程序包规范的程序包是不能使用的。
+  
+  
+  2.程序包主体：package body
+     主体主要就是对规范的实现，主要就是用来实现程序规范中规定的具体的子程序。
+	 
+	 创建语法：
+	  create [or replace] package body 包名 
+	  is
+	  各种子程序的实现
+	  end [包名];
+	  
+	  
+	 注意：主体的包名必须要和规范的包名保持一致。
+	 
+	 
+	 --创建程序包的主体
+		CREATE OR REPLACE PACKAGE BODY  pack_emp
+		IS
+		--实现函数
+		FUNCTION fun_avg_sal(dno NUMBER) RETURN NUMBER
+		  IS
+		  avg_sal NUMBER;
+		  BEGIN
+			SELECT AVG(sal) INTO avg_sal FROM emp WHERE deptno=dno;
+			--返回数据
+			RETURN avg_sal;
+		  END fun_avg_sal;
+		  
+		  
+		--实现存储过程
+		PROCEDURE pro_sal(eno NUMBER,esal OUT NUMBER)
+		  IS
+		  BEGIN
+			SELECT sal INTO esal FROM emp WHERE empno=eno;
+		END pro_sal;
+		END pack_emp;
+
+    程序包中子程序的调用：
+	  子程序调用方式和原来调用的方式是一样的，只是在子程序名称前面加上包名.
+	  程序包名.子程序名(参数值)
+
+      --调用程序包中的函数
+		SELECT pack_emp.fun_avg_sal(20) FROM dual;
+		--调用程序包中的存储过程
+		DECLARE
+		 esal NUMBER;
+		 BEGIN
+		   pack_emp.pro_sal(7369,esal);
+		   dbms_output.put_line(esal);
+		END;
+
+     
+    引用游标类型：
+	 关键字：ref cursor
+	 如果函数或者是存储过程需要返回多行数据则可以使用表类型返回也可以使用游标类型。
+	 使用步骤：
+	   1.定义一个引用游标类型
+	     type 类型名 is ref cursor;
+	   2.将查询到的数据赋值给引用游标的变量
+	     语法：open  引用游标变量 for select 语句;
+	   3.在读取引用游标变量的时候，不能使用for循环操作，因为游标在赋值的时候已经open
+	     只能使用while循环或者loop循环操作。并且不能再次打开游标。
+
+	 
+	--编写一个程序包
+	 --存储过程：查询某一个部门的员工的信息
+	--规范
+	CREATE OR REPLACE PACKAGE pack_emps
+	IS
+	--声明一个引用游标类型
+	TYPE type_cursor IS REF CURSOR;
+	--声明存储过程
+	PROCEDURE pro_emps(dno NUMBER,emps OUT type_cursor);
+	END; 
+
+	--主体
+	CREATE OR REPLACE PACKAGE BODY  pack_emps
+	IS
+	--实现存储过程
+	PROCEDURE pro_emps(dno NUMBER,emps OUT type_cursor)
+	  IS
+	  BEGIN
+		--将查询结果保存到输出的引用游标中
+		OPEN emps FOR SELECT * FROM emp WHERE deptno=dno;
+	 END pro_emps;
+	END;
+
+
+	--调用程序包中的存储过程
+	DECLARE
+	 --声明一个游标类型变量
+	 emps pack_emps.type_cursor;
+	 --声明变量
+	 es emp%ROWTYPE;
+	 BEGIN
+	   pack_emps.pro_emps(20,emps);
+	   --将游标类型中的数据打印
+	   LOOP
+		  --读取游标
+		 FETCH emps INTO es;
+		 EXIT WHEN emps%NOTFOUND;
+		 dbms_output.put_line(es.ename);
+		 END LOOP;
+		CLOSE emps;
+	 END;
+		 
+	 
+	 
+	 
+2.定时任务：
+  可以按照规定的时间间隔来重复执行一些设置好的任务，一般任何都会被封装成一个存储过程。
+  在Oracle中程序包相关的一些操作都是被封装到一个程序包中：dbms_job
+  查询系统中当前存在的定时任务数据字典：dba_jobs
+  
+  dbms_job中常见的存储过程：
+  1.dbms_job.submit():用来创建定时任务
+     语法：dbms_job.submit(job out number,  --用来返回定时任务的编号
+						   what in varchar2,  --用来设置定时任务要执行的任务，一般是一个存储过程
+						   next_date in date,  --用来设置定时任务要执行的时间
+						   interval in varchar2, --用来设置定时任务执行的时间间隔。
+	 
+	 );
+  
+    --编写一个定时任务，每隔1秒钟向表中添加一条数据
+	--将添加数据的操作封装车工存储过程
+	CREATE OR REPLACE PROCEDURE pro_insert
+	IS
+	BEGIN
+	  INSERT INTO job_t VALUES('zz');
+	  COMMIT;
+	END;
+	--创建定时任务
+	DECLARE
+	 jobid NUMBER;
+	 BEGIN
+	   dbms_job.submit(jobid,
+		 what=>'pro_insert;',
+		 next_date=>SYSDATE,
+		 INTERVAL=>'sysdate+1/24/60/60'
+	   );
+	dbms_output.put_line(jobid);
+	END;
+  
+  2.dbms_job.broken():用来禁用或者是启用定时任务
+    语法：dbms_job.broken(编号,true):禁用定时任务
+	
+	      dbms_job.broken(编号,false):启用定时任务
+  
+	--禁用定时任务
+	BEGIN
+	  dbms_job.broken(103,TRUE);
+	END;
+
+	--启用定时任务
+	BEGIN
+	  dbms_job.broken(103,false);
+	END;
+  
+  
+  
+  3.dbms_job.remove():用来删除定时任务
+    语法：dbms_job.remove(编号);
+	--删除定时任务
+	BEGIN
+	  dbms_job.remove(103);
+	END;

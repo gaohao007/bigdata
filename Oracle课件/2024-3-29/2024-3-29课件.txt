@@ -1,0 +1,404 @@
+1.游标：
+  关键字：cursor
+  再sql语句执行的时候，系统会自动划分一块空间来保存sql语句执行的结果和状态，这一块空间可以理解为游标。
+  作用：1.可以用来操作查询之后返回的多行结果集
+        2.统计DML语句影响的行数。
+   
+   游标分类：
+   1.显式游标：由用户自己定义的游标叫做显式游标。
+     使用场景：主要市用来操作select 语句执行的结果。
+	 显式游标操作的步骤：
+	   1.声明游标：声明游标和声明变量一样要写在pl/SQL块的declare部分。
+	     语法：cursor 游标名[(参数列表)] is
+		       select 语句;
+	 
+	        --声明一个游标，用来查询20号部门的员工的姓名和工资
+			DECLARE
+			 --声明游标
+			 CURSOR cur_emp IS
+			 SELECT ename,sal FROM emp WHERE deptno=20;
+		注意：声明游标仅仅是对游标的定义，不会执行游标中的sql语句	 
+			 
+		2.打开游标：打开游标必须要写在begin中。
+          语法：open 游标名[(参数值)]；
+        
+		注意：1.游标中的sql语句只有在打开游标的时候才会被执行，将执行的结果保存到游标名对应的空间中。
+		      2.游标在使用之前必须要先打开。
+			  3.游标在关闭之前只能打开一次。
+		3.操作游标|读取游标
+		  注意：读取游标必须要在游标打开之后进行
+		  语法：fetch 游标名 into 变量,变量,.....;
+		  
+		  注意：因为查询出来的数据有可能会存在多行，fetch..into操作默认一次只能读取一行，所以fetch操作可能会执行多次。
+		
+        4.关闭游标：在游标被读取完成之后可以关闭游标来释放游标所占用的资源。
+        语法：close 游标名;
+
+		注意：1.不能关闭一个没有打开的游标，否则报错。
+		      2.一个游标只能关闭一次，不能多次关闭。
+        
+   
+        --声明一个游标，用来查询指定部门的员工的姓名和工资
+		DECLARE
+		 --声明游标
+		 CURSOR cur_emp(dno NUMBER) IS
+		 SELECT ename,sal FROM emp WHERE deptno=dno;
+		 --声明变量
+		 e_name emp.ename%TYPE;
+		 e_sal emp.sal%TYPE;
+		BEGIN
+		  --打开游标
+		  OPEN cur_emp(20);
+		  
+		  --使用循环来多次读取游标中的数据
+		  LOOP
+			--读取游标
+			FETCH cur_emp INTO e_name,e_sal;  
+			EXIT WHEN cur_emp%NOTFOUND;
+			--输出数据
+			dbms_output.put_line(e_name||','||e_sal);
+			END LOOP;
+		  --关闭游标
+		  CLOSE cur_emp;
+		END;
+       
+	   --使用while循环
+		DECLARE
+		 --声明游标
+		 CURSOR cur_emp(dno NUMBER) IS
+		 SELECT ename,sal FROM emp WHERE deptno=dno;
+		 --声明变量
+		 e_name emp.ename%TYPE;
+		 e_sal emp.sal%TYPE;
+		BEGIN
+		  --打开游标
+		  OPEN cur_emp(20);
+		  --使用循环来多次读取游标中的数据
+		  --读取游标
+		  FETCH cur_emp INTO e_name,e_sal;  
+		  WHILE cur_emp%FOUND LOOP
+			--输出数据
+			dbms_output.put_line(e_name||','||e_sal);
+			 --读取游标
+			FETCH cur_emp INTO e_name,e_sal;  
+			END LOOP;
+		  --关闭游标
+		  CLOSE cur_emp;
+		END;
+   
+    
+	使用for循环读取游标：
+	注意：1.在使用for循环的时候不需要自己打开和关闭游标，系统会自动打开和关闭。
+	      2.也不需要自己使用fetch关键字来进行读取游标，系统会自动读取游标中的数据保存到循环变量中。
+	
+	--使用for循环来读取游标
+		DECLARE
+		 --声明游标
+		 CURSOR cur_emp(dno NUMBER) IS
+		 SELECT ename,sal FROM emp WHERE deptno=dno;
+		 BEGIN
+		   --使用循环操作游标
+		   FOR r_emp IN cur_emp(20) LOOP
+			 --输出结果
+			 dbms_output.put_line(r_emp.ename||','||r_emp.sal);
+		   END LOOP;
+		 END;
+	
+	
+	在游标中如何批量读取数据：
+	   如果表中的数据量很大，在读取数据的时候一条一条读取效率很低，则可以分批次来读取数据。
+	   分批次读取数据的语法：fetch 游标名 bulk collect into 表类型变量 [limit 条数]
+	   注意：1.读取出来的数据必须要通过表类型的变量来接受。
+	         2.如果设置了limit条数则每次读取指定条数的数据，如果没有设置limit则一次性全部读取。
+	
+	   --批量读取游标操作
+		--使用for循环来读取游标
+		DECLARE
+		 --声明游标
+		 CURSOR cur_emp IS
+		 SELECT * FROM emp WHERE deptno=20;
+		 --定义一个表类型
+		 TYPE type_table IS TABLE OF emp%ROWTYPE;
+		 --声明表类型变量
+		 r_emp type_table;
+		 BEGIN
+		   --打开游标
+		   OPEN cur_emp;
+		   --读取游标
+		   FETCH cur_emp BULK COLLECT INTO r_emp;
+		   --使用for循环将数据打印出来
+		   FOR i IN r_emp.first..r_emp.last LOOP
+			 dbms_output.put_line(r_emp(i).ename||','||r_emp(i).sal);
+		   END LOOP;
+		END;
+		   
+		--批量读取emp表中的数据每次读取5条
+		DECLARE
+		 CURSOR cur_emp IS
+		 SELECT * FROM emp;
+		  --定义一个表类型
+		 TYPE type_table IS TABLE OF emp%ROWTYPE;
+		 --声明表类型变量
+		 r_emp type_table;
+		 --定义变量记录次数
+		 c NUMBER:=0;
+		 BEGIN
+		   --打开游标
+		   OPEN cur_emp;
+		   --循环读取游标
+		   LOOP
+			 c:=c+1;
+			 
+			 FETCH cur_emp BULK COLLECT INTO r_emp LIMIT 5;
+			 --如果读取到表类型中行数为0则代表数据读取完成
+			 EXIT WHEN r_emp.count=0;
+			 --批量读取数据
+			 dbms_output.put_line('第'||c||'批读取数据：');
+			  --使用for循环将数据打印出来
+			   FOR i IN r_emp.first..r_emp.last LOOP
+				 dbms_output.put_line(r_emp(i).ename||','||r_emp(i).sal);
+			   END LOOP;
+			 END LOOP;
+			 
+		   --关闭游标
+		   CLOSE cur_emp;
+		  END;
+			 
+	
+	--使用select ..bulk collect来读取数据
+		DECLARE
+			--定义一个表类型
+		 TYPE type_table IS TABLE OF emp%ROWTYPE;
+		 --声明表类型变量
+		 r_emp type_table;
+		 --定义一个循环变量
+		 n NUMBER:=1;
+		 --批次
+		 page NUMBER:=0;
+		 BEGIN
+		   --获取批次
+		   SELECT ceil(count(*)/5) INTO page FROM emp;
+		   --循环读取
+		   WHILE n<=page LOOP
+				  dbms_output.put_line('第'||n||'批读取数据：');
+				 SELECT empno,ename,job,mgr,hiredate,sal,comm,deptno BULK COLLECT INTO r_emp FROM(  
+				 SELECT e.*,ROWNUM rn FROM emp e) WHERE rn BETWEEN (n-1)*5+1 AND 5*n; 
+		   --使用for循环将数据打印出来
+			   FOR i IN r_emp.first..r_emp.last LOOP
+				 dbms_output.put_line(r_emp(i).ename||','||r_emp(i).sal);
+			   END LOOP;
+			   n:=n+1;
+			 END LOOP;
+		 END;
+
+	
+	游标属性：
+	  %notfound:用来返回一个布尔类型的数据，如果游标没有读取到数据则返回true,否则返回false
+	  %found:用来返回一个布尔类型的数据，如果游标读取到数据则返回true,否则返回false
+	  %rowcount:返回一个数字类型，主要代表游标操作影响的行数，一般在隐式游标中使用比较多。
+	  %isopen:返回一个布尔类型的数据，用来判断游标是否被打开。
+	
+
+   2.隐式游标：
+     oracle中，每执行一条sql语句，数据库就会为该sql语句创建一个游标来保存数据，如果没有给该sql语句显式的定义游标则系统会默认由一个隐式游标。
+	 所有的隐式游标名称：sql
+	 
+	 注意：系统中只能同时存在一个隐式游标，隐式游标中保存的是他最近执行的一条sql语句的结果和状态。
+     使用场景：主要使用在一些DML语句中，当然查询语句也可以使用隐式游标。
+	 
+     --将员工表中的20号部门的员工的工资上调20%，并且输出上调人数。
+	BEGIN
+	  --上调工资
+	  UPDATE emp SET sal=sal*1.2 WHERE deptno=20;
+		--输出上调人数
+	  dbms_output.put_line('上调的人数为：'||sql%ROWCOUNT);
+	  --删除员工
+	  DELETE FROM emp WHERE deptno=30;
+	  dbms_output.put_line('删除的人数为：'||sql%ROWCOUNT);
+	END;
+	   
+    --查询20号部门的员工的信息
+	--显式游标
+	DECLARE
+	 CURSOR cur_emp IS
+	 SELECT * FROM emp WHERE deptno=20;
+	 BEGIN
+	   FOR r IN cur_emp LOOP
+		 dbms_output.put_line(r.ename||','||r.sal);
+	   END LOOP;
+	END;
+
+	--隐式游标
+	BEGIN
+	  FOR r IN (SELECT * FROM emp WHERE deptno=20) LOOP  
+	   dbms_output.put_line(r.ename||','||r.sal);
+	   END LOOP;
+	END;
+
+
+2.异常处理：
+  异常就是在程序执行的过程中发生的各种问题。
+  异常处理的语法：
+  exception
+     when 异常名 then
+	    处理异常的代码
+	 when 异常名 then
+	    异常处理的代码
+	 .......
+	 
+	异常分类：
+      1.系统预定义异常：数据库中已经定义好的异常，可以直接拿过来使用，一般Oracle数据库中系统预定义的异常只有二十多个。
+	    zero_divide:除数为0异常
+		no_data_found:在执行select ..into语句的时候如果没有查询到数据则抛出该异常
+		too_many_rows:在执行select..into语句的时候如果查询到多条数据则抛出该异常。
+		invalid_cursor:关闭一个没有打开的游标抛出该异常
+		cursor_already_open:打开一个已经被打开的游标抛出该异常
+		others:可以捕获 所有的异常，在实际的工作中基本商都是用others来进行捕获异常。
+	  
+	 注意：1.异常处理的时候可以有多个when，如果有others必须要将others放在异常处理的最后面。
+           2.程序在执行的过程中如果遇到异常，则直接跳到exception中对应的异常处理代码中进行处理，后续的代码不会被执行 
+	    获取异常信息的属性
+		   sqlcode:获取错误编码
+		   sqlerrm:获取错误信息
+		   
+	建议：在实际的工作过程中，一般都是通过others来捕获所有的异常，为了能够清晰的定位到异常发生的原因会将异常信息记录到一些日志文件中
+	       日志文件可以是一张表，也可以是一个文件。
+		   常见的日志表中的列：
+		    1.用户模式名称：
+			2.程序名称：
+			3.程序执行的开始时间
+			4.程序执行的结束时间
+			5.异常信息--------sqlerrm
+			6.程序执行状态：  成功|失败
+	  
+      2.用户自定义异常：
+         1.错误编号异常：是Oracle数据库中标准的错误，对数据库错误的引发也是由系统完成。
+		    在数据库中有很多错误编号没有设置名称，只有编号，但是编号不允许直接使用，所以在使用编号之前，
+			必须要先给编号设置一个名称。
+			使用步骤：
+			   1.声明一个异常变量
+			     变量名 exception;
+		       2.将异常变量和错误编号进行绑定
+			    pragma exception_init(异常名称,错误编号)
+			   3.使用绑定好的异常变量进行异常的处理
+			   
+			   --错误编号异常
+		DECLARE
+		--声明一个异常变量
+		  primary_err EXCEPTION;
+		  --将异常变量和错误编号进行绑定
+		  PRAGMA EXCEPTION_INIT(primary_err,-00001); 
+		BEGIN
+			   INSERT INTO dept VALUES(10,'','');
+			   EXCEPTION
+				 WHEN primary_err THEN
+				   dbms_output.put_line('主键不能重复！');
+		END;
+			   	 	 
+         2.业务逻辑异常：程序职系那个过程中，编程人员根据实际的业务情况任务某一些操作属于非正常情况，对于这种非正常情况就可以
+                          设置一个异常并且进行引发。	
+            注意：异常是由程序开发人员进行引发而不是系统引发。
+			
+	     实现步骤：
+		   1.定义一个异常变量
+		     语法：变量名  exception;
+		   2.在合适的地方来引发异常
+		     raise 异常名称;
+		   3.异常处理
+		   
+		   
+		 --定义一个异常，如果在向部门表中添加数据的时候，部门名称为空则就需要引发一个异常。
+		DECLARE
+		 --声明一个异常变量
+		 name_null EXCEPTION;
+		 r_dept dept%ROWTYPE;
+		 BEGIN
+		   --赋值
+		   r_dept.deptno:=13;
+		   r_dept.loc:='qqq';
+		   --添加数据
+		   INSERT INTO dept VALUES (r_dept.deptno,r_dept.dname,r_dept.loc);
+		   --判断如果name为空则引发异常
+		   IF r_dept.dname IS NULL THEN
+			 --引发异常
+			 RAISE name_null;
+		   END IF;
+		   EXCEPTION
+			 WHEN name_null THEN
+			   dbms_output.put_line('部门名称不能为空');
+			   ROLLBACK;
+		END;
+		
+		
+--面试题：使用PL/SQL来实现将表A中的数据逐条添加到表B中，如果在添加的过程中出现了问题，则需要将问题记录下来，然后再继续添加后面的数据；
+
+	DECLARE
+	 --定义游标
+	 CURSOR cur_a IS
+	 SELECT * FROM exception_a;
+	 BEGIN
+	   FOR a IN cur_a LOOP
+		 BEGIN
+		 INSERT INTO exception_b VALUES(a.str);
+		  EXCEPTION 
+		 WHEN OTHERS THEN
+		  dbms_output.put_line(SQLERRM);
+		  END;
+		END LOOP;
+	   EXCEPTION
+		 WHEN OTHERS THEN
+		   dbms_output.put_line('系统发生了问题');
+	END; 
+
+
+注意：正常情况下，一个Pl/SQL块中如果出现了异常则跳转到exception中进行异常处理然后程序结束，
+      如果当在程序里面出现了异常，只想记录异常信息，并且继续职系那个后面的内容，则可以再begin中嵌套一层begin来实现。
+
+
+3.动态sql执行：
+  使用场景：
+      1.如果再PL/SQL块中要执行一些DDL语句，则必须要使用动态sql来执行
+      2.在PL/sql中如果要执行一些一开始并不确定的SQL语句，则也需要使用动态sql来执行。
+	  
+	语法：execute immediate 'sql语句字符串' 
+	      [into 变量,变量,.....]
+		  [using 参数值,参数值,......]
+		  
+		  
+		【into】:专门用来接受动态sql执行了select语句之后查询结果，类似于select...into语句，因为动态sql语句中不能直接使用into语句。
+		
+		DECLARE
+		 e_name emp.ename%TYPE;
+		 e_job emp.job%TYPE;
+		BEGIN
+		  --将查询出来的数据保存到指定的变量中
+		  EXECUTE IMMEDIATE 'select ename,job from emp where empno=7369'
+		  INTO e_name,e_job;
+		  dbms_output.put_line(e_name||','||e_job);
+		END;
+		【using】:主要是用来给动态sql语句中的占位符进行传参，如果动态sql语句中使用了占位符，则必须要设置using
+		          占位符语法   :占位符名
+				  如果要给占位符传参，需要按照占位符的位置进行传参。
+				  
+		BEGIN
+		  EXECUTE IMMEDIATE 'insert into dept values(:dno,:dname,:dloc)'
+		  USING 81,'qq','ww';
+		END;
+	
+
+    --动态执行另外一张表中保存的sql语句
+	DECLARE
+	 CURSOR cur_sql IS
+	 SELECT * FROM sql_test;
+	 BEGIN
+	   FOR s IN cur_sql LOOP
+		--动态执行sql
+		EXECUTE IMMEDIATE s.sql_str;
+		END LOOP;
+	 END;
+	
+	--动态执行DDL语句
+	BEGIN
+	  --清空exception_b表中的数据
+	  EXECUTE IMMEDIATE 'drop TABLE exception_b';
+	END;

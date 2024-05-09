@@ -1,0 +1,593 @@
+PL/SQL编程：
+  是一种过程化的编程语言，专门针对Oracle数据库提供的一种编程语言。
+  主要就是借助于一些编程的思想，来完成一些比较复杂的操作，可以将多条sql语句封装到一起作为一个整体保存到数据库中，方便代码的复用。
+  一个完整的PL/SQL块有三部分组成：
+  1.声明部分：
+     关键字：declare
+	 主要是用来声明一些变量，类型，游标等等。
+	 注意：如果程序中不需要声明任何东西则declare可以省略。
+  2.执行部分：
+    关键字：begin......end
+    主要是用来实现程序的核心功能。
+	注意：再程序中执行部分不允许省略。
+  
+  3.异常处理：
+    关键字：exception
+	主要就是用来捕获程序再执行的过程中给出现的各种异常情况，并且进行处理。
+	注意：异常处理在程序中可以省略不写，在是在实际工作中都必须要写异常来进行日志记录。
+	
+	
+一个PL/SQL块的语法：
+  [
+   declear
+     声明变量;
+	 声明类型；
+	 声明游标；
+	 ........
+  ]
+  begin
+     程序具体要执行的一些代码
+   
+  [exception
+     when 异常名称 then
+	 异常处理
+	 when ........
+  ]
+  end;
+  
+--编写一个PL/SQL块来实现两个数字的商
+--声明变量
+DECLARE
+  --声明变量a=10
+  a NUMBER:=10;
+  --声明变量b=20
+  b number:=10;
+  --声明一个变量c用来保存计算的商
+  c NUMBER;
+  --执行部分
+  BEGIN
+    --计算商
+    c:=a/b;
+    --输出c
+    dbms_output.put_line(c);
+    --异常处理
+    EXCEPTION
+      WHEN zero_divide THEN
+        dbms_output.put_line('除数不能为0');
+  END; 
+  
+ 
+ 编写PL/SQL注意事项：
+   1.PL/SQL块中每一条语句结束必须要有分号
+   2.PL/SQL块中不能直接写select语句必须要使用select..into语句
+      select..into语句在查询的时候如果没有查询到数据则报错。
+	  select..into语句在查询的时候如果查询到多行数据报错。
+   3.PL/SQL中不允许直接执行DDl语句，必须要使用动态sql来执行。
+ 
+ 
+ 
+ 
+ 
+  
+1.变量的定义：
+   变量：在内存中开辟一块空间来保存即将要运算的数据。
+   
+   定义变量语法：
+     变量名  数据类型 [:=初始值]
+	 
+	   --声明变量a=10
+	  a NUMBER:=10;
+	  --声明变量b=20
+	  b number:=10;
+	  --声明一个变量c
+	  c NUMBER;
+	  --定义了一个字符串变量
+	  str VARCHAR2(20):='hello';
+	  
+	  注意：1.在定义变量的时候如果是字符串类型则必须要设置长度
+	        2.在PL/SQL中赋值符号是一个":="
+			3.只能将赋值符号右边的数据赋值给左边，赋值符号左边必须是一个变量名，不能是一个具体的值。
+			
+	常量：代表一个固定的值，不允许对常量的值进行修改，在实际的工作中，一般会将一些固定不变的数据定义常量。
+     语法：常量名 constant 数据类型 :=值；	
+			--定义一个常量
+			PI CONSTANT NUMBER:=3.14;
+	  注意：1.常量在定义的时候必须要有初始值。
+	        2.常量不允许在程序中修改值。
+			
+  接受用户键盘输入的数据：
+   语法：'&名称'
+   
+   注意：如果接受的是一个数字，则可以省略单引号，如果结束的是一个字符串则必须要有单引号。
+   
+   --请用户输入一个半径，来计算圆形面积
+--声明变量
+DECLARE
+ --声明变量保存用户输入的半径
+ r NUMBER:=&r;
+ --声明一个常量
+ PI CONSTANT NUMBER:=3.14;
+ --声明变量保存面积
+ area NUMBER;
+ BEGIN
+   --计算
+   area:=PI*POWER(r,2);
+   --输出结果
+   dbms_output.put_line('圆形的面积为:'||area);
+ END;
+ 
+ 2.PL/SQL中的数据类型：
+   1.基本数据类型：
+     1.数值型：number
+	 2.字符串类型：char  varchar2    long
+	 3.日期时间类型：date  timestamp
+	 4.布尔类型：boolean   只有两个值：true|false
+	 
+	--查询员工表中工号7369的员工的姓名和职位
+	DECLARE
+	 --声明变量
+	 e_name VARCHAR2(20);
+	 e_job VARCHAR2(20);
+	 BEGIN
+	   SELECT ename,job INTO e_name,e_job  FROM emp WHERE empno=7369;
+	   --输出
+	   dbms_output.put_line(e_name||','||e_job);
+	   --清除dept表中的数据
+	   --TRUNCATE TABLE dept;
+	END;
+
+   2.复杂数据类型：
+      1.%type:定义一个变量数据类型和某一张表中的某一列数据的数据类型保持一致。
+	  
+	  语法：变量名  表名.列名%type
+      --使用%type类型
+		--查询员工表中工号7369的员工的姓名和职位
+		DECLARE
+		 --声明变量
+		 e_name emp.ename%TYPE;
+		 e_job emp.job%TYPE;
+		 BEGIN
+		   SELECT ename,job INTO e_name,e_job  FROM emp WHERE empno=7369;
+		   --输出
+		   dbms_output.put_line(e_name||','||e_job);
+		   --清除dept表中的数据
+		   --TRUNCATE TABLE dept;
+		END; 
+			  
+	   2.%rowtype:相当于定义了一个变量的列表，包含了关联的表中的所有的列的变量
+	     语法：变量名  表名%rowtype;
+		 --查询7369员工的所有的信息
+		DECLARE
+		 --声明一个rowtype类型的变量
+		 r_emp emp%ROWTYPE;
+		 BEGIN
+		   SELECT * INTO r_emp FROM emp WHERE empno=7369;
+		   --输出数据
+		   dbms_output.put_line(r_emp.ename||','||r_emp.job||','||r_emp.sal);
+		END;
+
+		注意：查询出来的列的数量必须要和rowtype类型的变量中的列的数量一致，否则报错
+
+       --查询员工表中工资最高的员工的信息
+
+		DECLARE
+		 --声明一个rowtype类型的变量
+		 r_emp emp%ROWTYPE;
+		 BEGIN
+		   SELECT empno,ename,job,mgr,hiredate,sal,comm,deptno INTO r_emp FROM (
+		   SELECT e.*,row_number()OVER(ORDER BY sal DESC) rn FROM emp e) WHERE rn=1;
+		   --输出数据
+		   dbms_output.put_line(r_emp.ename||','||r_emp.job||','||r_emp.sal);
+		END;		
+				 
+      
+   3.自定义数据类型：
+       关键字：type
+      1.自定义记录类型：关键字：record
+	     使用步骤：
+		     1.定义一个记录类型
+			   语法：type 类型名 is record(
+			      变量1 数据类型,
+				  变量2 数据类型,
+				  ........
+			   )
+			 2.声明一个定义的数据类型的变量
+			   变量名  自定义数据类型名;
+			   
+			   
+	--查询员工表中7369的员工的姓名，职位，工资以及他所在部门的平均工资
+		DECLARE
+		  --定义一个记录类型
+		  TYPE type_emp IS RECORD(
+		   e_name emp.ename%TYPE,
+		   e_job emp.job%TYPE,
+		   e_sal emp.sal%TYPE,
+		   avg_sal NUMBER
+		  );
+		 --定义记录类型变量
+		  r_emp type_emp;
+		 BEGIN
+		   SELECT ename,job,sal,avg_sal INTO r_emp FROM(
+		   SELECT e.*,AVG(sal)OVER(PARTITION BY deptno) avg_sal FROM emp e)  WHERE empno=7369;
+			 --输出数据
+		   dbms_output.put_line(r_emp.e_name||','||r_emp.e_job||','||r_emp.e_sal||','||r_emp.avg_sal);
+		END;
+  
+			   
+	  2.自定义表类型：
+	    关键字:table of
+		1.声明一个表类型
+		  语法结构：type 类型名 is table of 表名%rowtype;
+		2.定义表类型的变量
+		  变量名  自定义数据类型名;
+		  
+		表类型中的常见属性：
+        count:获取表类型变量中数据的行数
+        first:获取表类型变量中第一行数据的行号
+        last:获取表类型变量中最后一行数据的行号
+        注意：获取表类型中某一行数据需要使用行号来获取
+             语法：表类型变量(行号).列名	
+		
+			
+         select..into语句只能查询一行数据，如果查询出来的数据有多行则必须要使用批量操作：select ...bulk collect into  表类型
+		 注意：使用bulk collect 语句查询数据的时候只能使用表类型的变量来接受数据
+		 
+		 --查询20号部门的员工的姓名，职位，工资
+		DECLARE
+		  --声明一个表类型
+		  TYPE table_emp IS TABLE OF emp%ROWTYPE;
+		  --声明一个表类型的变量
+		  t_emp table_emp;
+		BEGIN
+		  SELECT * BULK COLLECT INTO t_emp FROM emp WHERE deptno=20;
+		  --循环获取表类型中保存的数据
+		  FOR i IN t_emp.first..t_emp.last LOOP
+			dbms_output.put_line(t_emp(i).ename||','||t_emp(i).job);
+		  END LOOP;
+		END;
+		 
+		 
+
+	  3.自定义游标类型:
+	  
+	  
+	
+ 3.PL/SQL中的流程控制语句：
+   常见的程序结构：
+     1.顺序结构：
+	 2.分支结构：
+	   程序在执行的过程中，会根据指定的条件来选择不同的代码执行。
+	   1.if...else:
+	     语法：if 条件判断 then
+		           条件成立执行的代码
+			   [else
+			       条件不成立执行的代码]
+			   end if;
+	   
+	   
+	   --查询7369员工的职位，如果职位"PRESIDENT"则输出总裁，否则输出：员工
+		DECLARE
+		 e_job emp.job%TYPE;
+		 BEGIN
+		   SELECT job INTO e_job FROM emp WHERE empno=7839;
+		   --判断
+		   IF e_job='PRESIDENT' THEN
+			 dbms_output.put_line('总裁');
+		   ELSE
+			 dbms_output.put_line('员工');
+		   END IF;
+		END;
+  
+	   2.if...elsif....else:实现多分支语句
+	     语法：if 条件判断1 then
+		          条件1成立执行的代码
+			   elsif 条件判断2 then
+			      条件2成立执行的代码
+			   .....
+			   else
+			     以上所有的条件都不成立执行的代码；
+			   end if;
+	   
+	     --输入一个员工的编号，查询出员工的职位，将职位显示为中文
+			DECLARE
+			  e_job emp.job%TYPE;
+			  BEGIN
+				--查询数据
+				SELECT job INTO e_job FROM emp WHERE empno=&eno;
+				--判断职位
+				IF e_job='SALESMAN' THEN
+				  dbms_output.put_line('销售员');
+				ELSIF e_job='CLERK' THEN
+				  dbms_output.put_line('办事员');
+				  ELSIF e_job='MANAGER' THEN
+				  dbms_output.put_line('经理');
+				  ELSIF e_job='ANALYST' THEN
+				  dbms_output.put_line('分析员');
+				  ELSE
+					dbms_output.put_line('总裁');
+				  END IF;
+			END;
+
+			--输入一个学生的成绩，判断成绩等级
+			DECLARE
+			 score NUMBER:=&s;
+			 BEGIN
+			   IF score >100 OR score<0 THEN
+				 dbms_output.put_line('成绩无效');
+			   ELSIF score>=90 THEN
+				 dbms_output.put_line('优秀');
+			   ELSIF score>=80 THEN
+				 dbms_output.put_line('良好');
+				 ELSIF score>=60 THEN
+				 dbms_output.put_line('及格'); 
+				ELSE 
+				 dbms_output.put_line('不及格'); 
+			  END IF;
+			END;
+
+	   3.case when:
+	      --非等值匹配
+	     语法：case when 条件1 then
+		               条件1成立执行的代码
+					when 条件2  then
+					   条件2成立执行的代码
+					......
+					else
+					   条件都不成立执行的代码;
+				end case;
+	     --等值匹配
+		   语法：case 变量 when 值1 then
+		               变量等于值1的时候执行的代码
+					       when 值2  then
+					   变量等于值2的时候执行的代码
+					......
+					else
+					   变量和以上的值都不匹配执行的代码;
+				end case;
+	  
+		--输入一个员工的编号，查询出员工的职位，将职位显示为中文
+		DECLARE
+		  e_job emp.job%TYPE;
+		  BEGIN
+			--查询数据
+			SELECT job INTO e_job FROM emp WHERE empno=&eno;
+			--判断职位
+			CASE e_job  WHEN 'SALESMAN' THEN
+							  dbms_output.put_line('销售员');
+						WHEN 'CLERK' THEN
+							 dbms_output.put_line('办事员');
+						WHEN 'MANAGER' THEN
+							 dbms_output.put_line('经理');
+						WHEN 'ANALYST' THEN
+							 dbms_output.put_line('分析员');
+						ELSE
+							 dbms_output.put_line('总裁');
+				END CASE;
+		END;
+
+		--输入一个学生的成绩，判断成绩等级
+		DECLARE
+		 score NUMBER:=&s;
+		 BEGIN
+		   CASE WHEN score >100 OR score<0 THEN
+			 dbms_output.put_line('成绩无效');
+		   WHEN score>=90 THEN
+			 dbms_output.put_line('优秀');
+		   WHEN score>=80 THEN
+			 dbms_output.put_line('良好');
+			 WHEN score>=60 THEN
+			 dbms_output.put_line('及格'); 
+			ELSE 
+			 dbms_output.put_line('不及格'); 
+		  END CASE;
+		END;
+		
+		
+	--输入一个年份，判断是否是闰年
+	--闰年条件：能被4整除但是不能被100整除，或者能被400整除
+	DECLARE
+	  YEAR NUMBER:=&YEAR;
+	  BEGIN
+		--判断是否是闰年
+		IF MOD(YEAR,4)=0 AND MOD(YEAR,100)<>0 OR MOD(YEAR,400)=0 THEN
+		  dbms_output.put_line('是闰年');
+		ELSE
+		  dbms_output.put_line('不是闰年');
+		END IF;
+	END;	
+
+	   
+	 3.循环结构：
+	 
+	 在程序执行的过程中，根据指定的条件来重复执行某一些操作，可以使用循环。
+	 循环三要素：
+	   1.循环变量：在循环的过程中不断发生变化的变量。
+	   2.循环体：需要重复执行的一段代码。
+	   3.循环条件：可以控制循环是继续还是结束的一个条件。
+	1.loop:
+	  语法：loop
+	         [循环体1]
+			 exit when 循环结束条件
+			 [循环体2]
+			 end loop;
+	
+	执行顺序：先执行循环体1，然后判断循环结束条件，如果条件成立，则直接结束循环，
+	          如果循环结束条件不成立，则执行循环体2，然后继续执行循环体1，然后再判断条件.....
+	
+	DECLARE
+	 i NUMBER:=1;
+	BEGIN
+	  dbms_output.put_line(i);
+	  i:=i+1;
+	  dbms_output.put_line(i);
+	  i:=i+1;
+	  dbms_output.put_line(i);
+	  i:=i+1;
+	  dbms_output.put_line(i);
+	  i:=i+1;
+	  dbms_output.put_line(i);
+	  i:=i+1;
+	END;
+	--使用循环来打印1-5
+	DECLARE
+	  i NUMBER:=1;
+	  BEGIN
+		--循环
+		LOOP
+			dbms_output.put_line(i);
+			i:=i+1;
+		 EXIT WHEN i>10;
+		 END LOOP;
+	 END;
+
+	--计算1-100的和
+	--1+2+3+4......+100
+	/*
+	sum1=0
+	i=1;
+	sum1+i=1;
+	i:=i+1;
+	sum1+i=3;
+	i:=i+1;
+	sum1+i=6;
+	i:=i+1;
+	sum1+i=10;
+	i:=i+1;
+	......
+	sum1+i=5050;
+
+	循环变量：i=1
+	循环条件：i<=100
+	循环体：sum1:=sum1+i
+			 i:=i+1;
+	*/
+
+	DECLARE
+	 sum1 NUMBER:=0;
+	 i NUMBER:=1;
+	 BEGIN
+	   LOOP
+		 sum1:=sum1+i;
+		 i:=i+1;
+	   EXIT WHEN i>100;
+	   END LOOP;
+	   --输出结果
+	   dbms_output.put_line('1-100的和为：'||sum1);
+	END;
+
+    2.while:
+	语法：while 循环条件 loop
+	          循环体
+		  end loop;
+	
+	  执行顺序：先判断循环条件，如果条件成立则继续执行循环体，然后再判断条件，如果条件不成立则循环结束。
+	  
+	--打印1-10
+	DECLARE
+	 --声明循环变量
+	 i NUMBER:=1;
+	 BEGIN
+	   WHILE i<=10 LOOP
+		 dbms_output.put_line(i);
+		 --循环变量递增
+		 i:=i+1;
+	   END LOOP;
+	END;
+
+	--计算1-100的和
+	DECLARE
+	 sum1 NUMBER :=0;
+	 i NUMBER:=1;
+	 BEGIN
+	   WHILE i<=100 LOOP
+		 sum1:=sum1+i;
+		 --递增
+		 i:=i+1;
+	   END LOOP;
+		  --输出结果
+	   dbms_output.put_line('1-100的和为：'||sum1);
+	END;  
+	
+    3.for：	
+	  语法：for 循环变量  in [reverse] 开始..结束|游标名 loop
+	              循环体;
+		    end loop;
+			
+			
+	     注意：1.for循环的循环变量直接定义再for关键字后面，无需单独定义
+		       2.循环变量的递增或者是递减操作由系统自动完成。
+			   3.for循环默认循环变量是递增，但是可以通过设置reverse关键字来实现递减效果。
+			   
+		--使用for循环打印1-10
+		BEGIN
+		  FOR i IN 1..10 LOOP
+			dbms_output.put_line(i);
+		  END LOOP;
+		END;
+
+		--打印10-1
+		BEGIN
+		  FOR i IN REVERSE 1..10 LOOP
+			dbms_output.put_line(i);
+		  END LOOP;
+		END;
+	
+	  --使用for循环计算1-100的和
+		DECLARE
+		 sum1 NUMBER:=0;
+		 BEGIN
+		   FOR i IN 1..100 LOOP
+			 sum1:=sum1+i;
+		   END LOOP;
+				 --输出结果
+		   dbms_output.put_line('1-100的和为：'||sum1);
+		END;
+			   
+	循环控制语句：
+	  1.exit：直接结束循环
+	     如果再一开始没有办法确定循环次数的时候，可以再循环体内部使用exit来结束循环。
+		 
+		 --打印1-10
+		DECLARE
+		 i NUMBER:=1;
+		 BEGIN
+		   WHILE TRUE LOOP
+			 --如果i大于10则结束循环
+			 IF i>10 THEN
+			   EXIT;
+			 END IF;
+			 dbms_output.put_line(i);
+			 i:=i+1;
+		   END LOOP;
+		 END;
+		 
+		--打印出第二个能被17整除的数字
+		DECLARE
+		 --定义循环变量
+		 i NUMBER:=1;
+		 --定义变量，用来记录被整除的次数
+		 n NUMBER:=0;
+		 BEGIN
+		   WHILE TRUE LOOP
+			 IF n>=2 THEN
+			   EXIT;
+			 END IF;
+			 IF MOD(i,17)=0 THEN
+			   dbms_output.put_line(i);
+			   n:=n+1;
+			 END IF;
+			 --循环变量要递增
+			 i:=i+1;
+			END LOOP;
+		 END;
+		 
+	2.continue:跳过当次循环，进入下一次循环。
+	  --打印1-10中除了3之外的数字
+		BEGIN
+		  FOR i IN 1..10 LOOP
+			IF i=3 THEN
+			  CONTINUE;
+			END IF;
+			dbms_output.put_line(i);
+		  END LOOP;         
+		 END;

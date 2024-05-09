@@ -1,0 +1,396 @@
+1.数据库对象-------用户
+ 关键字：user
+ 作用：1.控制数据库的安全
+       2.管理数据库中的对象
+	   
+	在Oracle中数据安全的管理流程：
+	1.向数据库提供一个身份信息：登录数据库的账号
+	2.验证身份是否有效：登录密码
+	3.要验证用户是否要操作数据库的权限
+	
+	
+	查询数据库中所有用户的数据字典：dba_users
+	--查询系统中所有的用户
+	SELECT * FROM dba_users;
+	数据库中默认的用户：
+	sys
+	system
+	scott       初始密码：tiger
+	hr
+	........
+	
+    Oracle数据库中提供了3种用户的身份：
+	normal:普通用户
+	sysdba:超级管理员身份，拥有数据库种的最大的权限
+	sysoper:管理员身份，但是没有执行数据库的不完全备份和恢复的权限。
+	
+	1.自定义用户：
+	  语法：create user 用户名   identified by 密码 
+	        [default tablespace 默认表空间名]
+			[temporary tablespace 临时表空间]
+			[account lock|unlock]
+			
+		注意：1.在创建用户的时候如果不指定默认表空间则使用users表空间作为默认表空间，如果不设置临时表空间，使用temp作为临时表空间。
+		      2.默认创建的用户没有上锁，如果要锁定用户则需要使用account lock
+			  3.刚创建好的用户是没有任何权限，也不能登录。
+   		
+	    
+		--创建一个用户xiaohong   密码123456   表空间默认表空间   该用户上锁
+		CREATE USER xiaohong IDENTIFIED BY 123456 ACCOUNT LOCK;
+
+		--创建一个用户xiaohei   密码123456   默认表空间tbs_1 
+		CREATE USER xiaohei  IDENTIFIED BY 123456 DEFAULT TABLESPACE tbs_1;
+   
+	2.用户的维护操作
+	   1.修改用户的密码：
+	     语法：alter user 用户名 identified by 新密码;
+		 --修改scott用户的密码
+		  ALTER USER scott IDENTIFIED BY 123456;
+		  
+	   2.解锁或者锁定账号：
+	     语法：alter user 用户名 account unlock|lock;
+		 --解锁账号
+		 ALTER USER bi ACCOUNT UNLOCK;
+	3.删除用户
+	   语法：drop user 用户名 [cascade];
+	   注意：如果删除的用户中有对象或数据，则必须要指定cascade选项。
+	   
+	   --删除用户
+		DROP USER scott;
+		DROP USER lisi CASCADE;
+		DROP USER zhangsan;
+
+
+	用户：代表账号本身
+    用户模式：代表该账号下面所有的对象的集合。
+
+
+2.数据库中权限管理
+   数据库中的权限主要分为两种：
+   1.系统权限：主要就是用来进行一些系统级别的操作，一般常用的操作属于DDL语句。
+      例如：create session(登录权限)   create table(创建表权限)  create user(创建用户) .......      
+   
+   
+   2.对象权限：主要是针对数据库中的某一个对象的操作。
+      例如：select  insert  delete   update   execute(执行权限) .......
+	  
+	  
+   授权的关键字：grant
+   --授予系统权限
+   授权语法：grant 权限1,权限2,角色,..... to 用户名 [with admin option];
+   
+   注意：with admin option：如果设置了该选项，则代表用户可以将管理员授予他的权限再授予给其他用户
+   
+   --授予xiaohong登录和建表的权限
+	GRANT CREATE SESSION,CREATE TABLE TO xiaohong WITH ADMIN OPTION;
+	--建表
+	CREATE TABLE t(ID NUMBER,NAME VARCHAR2(20));
+	SELECT * FROM t;
+
+	--给xiaohei授权
+	GRANT CREATE SESSION,CREATE TABLE TO xiaohei;
+	  
+	--授予对象权限
+     语法：grant 权限,权限,..... on	对象名 to 用户名;
+	 
+	 --授予xiaohei查询scott用户下面的emp表的权限
+	 GRANT SELECT ON scott.emp TO xiaohei;
+
+    回收权限关键字：revoke
+	--回收系统权限：revoke 权限,..... from 用户名;
+	--回收对象权限：revoke 权限,..... on 对象名 from 用户名;
+	
+	--回收select权限
+	REVOKE SELECT ON scott.emp FROM xiaohei;
+	--回收小黑的登录权限
+	REVOKE CREATE SESSION FROM xiaohei;
+	
+
+    常见的数据字典：
+	 dba_data_files:查询表空间的数据字典
+	 dba_users:查询系统用户的数据字典
+	 dba_sys_privs:查询授予给用户的所有的系统权限，可以通过where来过滤查询指定用户所授予的系统权限
+	 --查询授予给SCOTT用户的系统权限
+	 SELECT * FROM Dba_Sys_Privs WHERE grantee='SCOTT';
+	 dba_tab_privs:查询所有的数据库对象上面授予的对象权限，可以配合where过滤某一个对象的相关权限。
+     
+		--查询授予的对象权限
+		SELECT * FROM Dba_Tab_Privs WHERE table_name='EMP';
+     user_sys_privs:查询当前用户所拥有的系统权限
+	 --查询当前用户的系统权限
+	 SELECT * FROM user_sys_privs;
+	 role_sys_privs:查询当前用户所拥有的角色
+	 --查询当前用户所拥有的角色
+	 SELECT * FROM Role_Sys_Privs ;
+	 dba_roles:查询系统中所有的角色
+	 --查询系统中所有的角色
+	 SELECT * FROM dba_roles;
+	 
+
+
+3.数据库中的对象---角色
+  关键字：role
+  角色相当于多个权限的集合，也就是说将多个权限封装成一个整体然后进行使用。
+  系统提供的角色大概有五十多个，角色的授予和权限授予方式是一样的。
+  
+  Oracle中常见的角色：
+  DBA:管理员角色
+  connect:连接的角色
+  resource:基本开发权限的角色
+  ....
+  
+  
+   
+    --授予小黑connect和resource权限
+	GRANT CONNECT,RESOURCE TO xiaohei;
+
+
+   自定义角色：
+     语法：create role 角色名;
+	 
+	 --创建一个角色
+	CREATE ROLE my_role;
+	
+	注意：创建好角色之后没有任何的权限，需要自己添加权限
+	向角色中添加权限------授权
+	--给角色授予登录和建表的权限
+	GRANT CREATE SESSION,CREATE TABLE TO my_role;
+	--将角色授予给小黑
+	GRANT my_role TO xiaohei;
+	
+	--回收角色中的权限
+	REVOKE CREATE SESSION FROM my_role;
+	
+   删除角色：
+     drop role  角色名;
+	 
+    
+	--删除角色
+	DROP ROLE my_role;
+	
+	注意：如果删除了角色中的权限，或者是删除角色，则拥有该角色的用户所拥有的权限也会自动失效。
+	
+
+
+4.数据库中的事务（重点）
+  TCL语言：事务控制语言
+  什么是事务：
+    从数据库操作层面：事务是数据库操作的最小单元。
+	从sql语句层面：事务是一条或者是多条sql语句的集合。
+	从业务逻辑层面：事务就是一个完整的业务过程。
+  事务的作用：保证数据的完整性和一致性
+  事务的特性：
+     1.原子性：事务是一个整体，事务中的sql操作要么全部成功，如果有一个操作失败则其他的所有操作都要撤回到最初的状态。
+	 2.一致性：事务再执行之前的状态要和执行之后的状态或者是预设的状态保持一致。
+	 3.持久性：事务一旦提交时候，对数据库做的修改就会永久保存下来。
+	 4.隔离性：事务和事务之间是相互独立的。
+	 
+	 隔离级别：
+	 主要就是解决数据库中多个事务之间共享一个资源的时候出现的一些问题。
+	 隔离级别不合理导致的一些问题：
+	 1.更新覆盖：如果两个事务同时修改某一个数据，则就有可能会导致其中一个事务会将另一个事务的修改覆盖了。
+	 2.脏读：事务A对某一个数据进行修改，但是还没有提交，事务B就读取到了该数据，事务A撤回刚才修改操作，导致事务B读取到一个脏数据，这个过程就是脏读。
+	 3.不可重复读：事务A中有两次要读取数据，当读取了一次之后，事务B修改数据，导致第二次读取到的数据和第一次的不一致。
+	 4.幻读：和不可重复读类似，只不过针对的时候查询的结果集。
+	 
+	 数据库中的隔离级别：
+	 1.串行读：serializable，是数据库中最高的隔离级别，可以解决以上所有的问题，但是效率是最低。
+	          建议：除非有特别要求，否则慎用！
+	 2.可重复读：repeatable read:如果一个事务没有读取完成数据则不允许其他事务对数据进行修改，但是允许读取。
+	    可以解决：更新覆盖     脏读    不可重复读
+	 3.提交读：read committed:（数据库中默认的隔离级别）如果一个事务修改完没有提交，则不允许别的事务进行去读操作。
+	    可以解决：更新覆盖    脏读
+	 
+	 4.未提交读：read uncommitted:如果一个事务修改了数据没有提交则不允许别的事务进行修改，但是允许读取操作。
+	     可以解决：更新覆盖
+  
+	 Oracle数据库中隔离级别的修改：
+	   1.只修改当次会话（连接）的隔离级别：
+	    ALTER SESSION SET TRANSACTION ISOLATION LEVEL  隔离级别;
+		例如：
+		ALTER SESSION SET TRANSACTION ISOLATION LEVEL  SERIALIZABLE;
+	   2.修改整个数据库i的隔离级别：
+	     SET TRANSACTION ISOLATION LEVEL  隔离级别
+		 SET TRANSACTION ISOLATION LEVEL  SERIALIZABLE;
+  
+     事务的隔离级别最终都是由锁来控制：
+	 Oracle中锁主要分类2大类：
+	 1.共享锁：S锁
+	   共享锁又叫做读锁，如果一个事务对数据添加了共享锁，则允许其他的事务再对该数据添加共享锁，可以同时进行数据的读取操作，但是不允许其他事务
+	   对该数据添加排他锁，也就是说不允许其他事务对数据进行修改操作。
+	 
+	 2.排他锁：X锁
+	   排他锁又叫做写锁,如果一个事务对该数据添加了排他锁，则不允许其他的事务对该数据添加任何锁，该事务可以对数据进行增删查改操作，但是其他的事务不能
+	   进行任何操作。
+    
+	
+	
+	注意：1.排他锁一般适用于行级锁，共享锁一般适用于表级锁
+	      2.在执行一些DML语句的时候系统会自动给操作的数据行添加排他锁。
+		  3.在执行DQL语句的时候系统不会添加任何锁，但是可以自己来添加锁。
+		  
+	给表添加共享锁：
+	   语法：lock table 表名 in share mode;
+	   
+	    --给dept表添加一个共享锁
+		LOCK TABLE dept IN SHARE MODE;
+	   
+
+    给行添加排他锁：
+       语法：select * from 表 for update;	
+	   --设置表的排他锁
+	  SELECT * FROM dept WHERE deptno=11 FOR UPDATE
+	  
+	  
+Oracle中排查和解决资源被占用的情况：
+	    可以从一下几个表或者是视图来查询资源被占用的情况：（需要使用管理员权限进行查询）
+		视图：v$locked_object:保存的是被锁定的资源信息
+		      v$session:保存的是当前会话中所有的执行过的sql信息
+			  dba_objects:保存了系统中所有的对象名。
+			  
+		如果要杀死对应被占用的资源则必须要获取到资源的sid和serial#
+		
+--关联三张表
+SELECT b.sid,b.SERIAL#,c.object_name FROM v$locked_object a JOIN v$session b ON a.session_id=b.sid 
+JOIN dba_objects c ON a.OBJECT_ID=c.object_id
+
+--根据对应的sid和serial#来结束对应的进程
+alter system kill session 'sid,serial#'
+	  
+例如：
+alter system kill session '34,2227'	
+
+
+事务的操作：
+   1.事务开启：
+     在oracle中事务是系统自动开启。
+   
+   2.事务结束：
+       1.在数据库中如果执行了DDL语句则系统会自动提交事务。
+	   2.如果正常退出数据库或者是会话系统也会自动提交事务。
+	   3.如果执行的是DML语句则需要手动结束事务。
+	
+	 1.commit:提交事务
+	   如果事务一旦被提交则数据就会被永久保存到磁盘上，不允许回滚，如果事务没有提交则修改的数据
+	   知识保存在当前会话窗口的内存中。
+	   注意：在实际工作中，在保证数据完整性的前提下要多使用commit.
+	   
+	   事务提交时候：1.释放事务的锁
+	                 2.释放撤销表空间中的数据
+					 3.其他的资源
+	   
+	     
+	 2.rollback:回滚事务
+	   对数据库所作的修改进行撤回，回到事务执行之前的状态，事务回滚只能回滚没有提交的事务。
+	 3.savepoint:  保存点
+	    设置保存点的语法：savepoint  保存点名
+		回滚到保存点：rollback to savepoint 保存点名;
+		
+		注意：回滚到保存点之后事务不会结束，还需要手动提交事务。
+	
+5.	表的集合操作：
+
+	1.并集操作：（重要）将两个表格上下合并到一起
+	  关键字：union [all]
+	   语法：select 语句
+	         union [all]
+             select 语句
+             union [all]
+             ........
+      注意：1.在使用union的时候如果设置了all，则代表直接将两张表的结果进行合并，没有没有all会先和并再进行排序去重
+	          所以建议再实际的工作中推荐使用union all来代替union.
+			 2.再进行union的时候，必须要保证结果集的列数以及对应的数据类型要一致。 
+			 
+	    SELECT ID,NAME,age FROM user_t
+		UNION ALL
+		SELECT ID,NAME,age FROM user_t1
+
+		SELECT ID,NAME,age FROM user_t
+		UNION 
+		SELECT ID,NAME,age FROM user_t1
+		
+
+		--查询每一个部门每个职位的工资总和
+		--方式一：使用rollup函数
+		SELECT deptno,job,SUM(sal) FROM emp GROUP BY rollup(deptno,job);
+		--方式二：使用union 
+		--查询每一个部门中每一个职位的工资总和
+		SELECT deptno,job,SUM(sal) FROM emp GROUP BY deptno,job
+		UNION 
+		--查询每一个部门的工资总和
+		SELECT deptno,'小计',SUM(sal) FROM emp GROUP BY deptno
+		UNION
+		--查询所有员工的工资总和
+		SELECT null,'总计',sum(sal) FROM emp;
+		
+		--使用全连接来实现并集效果
+		SELECT NVL(a.id,b.id)ID,
+		NVL(a.name,b.name)NAME,
+		NVL(a.age,b.age)age 
+		FROM user_t1 a FULL JOIN user_t b ON a.id=b.id AND a.name=b.name AND a.age=b.age ORDER BY ID;
+   			 
+	
+	2.交集操作：返回的是两个结果集中相同的数据
+	   关键字：intersect
+	    语法：select 语句
+	         intersect
+             select 语句
+             intersect
+             ........
+	--交集操作
+SELECT id,NAME,age FROM user_t
+INTERSECT 
+SELECT ID,NAME,age FROM user_t1;
+
+--使用子查询实现交集操作
+SELECT id,NAME,age FROM user_t a WHERE EXISTS(SELECT * FROM user_t1 b WHERE a.id=b.ID AND a.name=b.name AND a.age=b.age);
+		 
+			 	   
+	3.差集操作：结果集A-结果集B：返回结果集A中和结果B不一样的数据。
+	  关键字：minus
+	 	    语法：select 语句
+	         minus
+             select 语句
+             minus
+             ........
+	
+	--差集操作
+	SELECT ID,NAME,age FROM user_t
+	MINUS
+	SELECT ID,NAME,age FROM user_t1;
+	--使用not exists来实现差集操作
+	SELECT id,NAME,age FROM user_t a WHERE NOT  EXISTS(SELECT * FROM user_t1 b WHERE a.id=b.ID AND a.name=b.name AND a.age=b.age);
+
+	
+	
+	
+	
+关联子查询：
+   子查询执行必须要依赖于外查询的条件，不能单独使用。
+   --查询员工的工资大于他所在部门的平均工资的员工的信息
+	--方式一：
+	--查询每一个部门的平均工资
+	SELECT deptno,AVG(sal) FROM emp GROUP BY deptno;
+	--查询员工的工资大于平均工资
+	SELECT * FROM emp e JOIN(SELECT deptno,AVG(sal) 平均工资 FROM emp GROUP BY deptno) b
+	ON e.deptno=b.deptno WHERE sal>平均工资;
+	--方式二：使用关联子查询
+	SELECT * FROM emp e WHERE sal>(SELECT AVG(sal) FROM emp WHERE deptno=e.deptno);
+   
+   
+ exists:功能和in类似，用来判断数据是否再一个子查询的结果中存在。
+       特点：如果子查询的数据量大于外查询的数据量则推荐使用exists，效率更高。
+	   语法：select * from 表名 a where exists(select * from 表名 b where a.关联字段=b.关联字段) 
+	  
+ in:
+       特点：如果子查询的数据量远远小于外查询的数据量则推荐使用in，效率更高。
+	   
+ --2、查询学过“c001”并且也学过编号“c002”课程的同学的学号；
+--方式一：交集操作
+SELECT sno FROM sc WHERE cno='c001'
+INTERSECT
+SELECT sno FROM sc WHERE cno='c002';
+--方式二：子查询in
+SELECT * FROM sc WHERE cno='c001' AND sno IN(SELECT sno FROM sc WHERE cno='c002')
+--方式三：子查询exists
+SELECT * FROM sc s WHERE cno='c001' AND EXISTS(SELECT sno FROM sc WHERE cno='c002' AND s.sno=sno)

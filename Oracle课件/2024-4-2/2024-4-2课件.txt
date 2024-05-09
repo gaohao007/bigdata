@@ -1,0 +1,285 @@
+ 2.加载策略：
+	    主要考虑的因素：考虑是否对目标表中的现有数据造成印象，例如：保证数据的完整性，重复执行之后要保证状态是一致的。
+		加载策略主要由4种：
+		1.直接追加：将抽取过来的数据直接增加到目标表中。
+		          使用场景：对于抽取方式为新增抽取的可以使用直接追加。
+				  
+				  使用语句：insert into ......
+				  
+				  
+		例如：--ETL策略:新增抽取------直接追加
+			CREATE OR REPLACE PROCEDURE pro_append(work_date VARCHAR2)
+			IS
+			BEGIN
+			  --为了支持重跑，在添加数据之前必须要将对应日期的数据先删除
+			  DELETE FROM user_t1 WHERE to_char(last_date,'yyyy-mm-dd')=work_date;
+			  
+			  --加载数据
+			  INSERT INTO user_t1
+			  SELECT * FROM user_t WHERE to_char(last_date,'yyyy-mm-dd')=work_date;
+			END;
+				  
+				  
+		2.直接覆盖：将目标表中的数据全部删除，然后在将抽取过来的数据添加。
+		          使用场景：抽取方式为全量，并且不要求记录数据的历史信息，则可以使用直接覆盖。
+				  使用语句：truncate 来清除数据
+				            insert into加载数据
+            例如：
+			--ETL策略：全量抽取-----直接覆盖
+			CREATE OR REPLACE PROCEDURE pro_append1
+			IS
+			BEGIN
+			  --清除目标表中的所有数据
+			  EXECUTE IMMEDIATE 'truncate table user_t1';
+			  
+			  --加载数据
+			  INSERT INTO user_t1
+			  SELECT * FROM user_t;
+			END;
+
+			--调用
+			CALL pro_append1();
+		
+		3.更新追加：将抽取过来的数据和目标表中的数据进行对比，如果已经存在的则需要修改，否则需要进行新增。
+		          使用场景：抽取方式如果是增量抽取，并且不需要保留历史数据，则可以使用更新追加。
+				  使用语句：merge into
+				  
+			   --ETL策略：增量抽取------更新追加
+				SELECT * FROM user_t1;
+				CREATE OR REPLACE PROCEDURE pro_append2(work_date VARCHAR2)
+				IS
+				BEGIN
+				  --加载数据
+				  MERGE INTO user_t1 t USING (SELECT * FROM user_t WHERE to_char(last_date,'yyyy-mm-dd')=work_date) s
+				  ON (t.id=s.id)
+				  WHEN MATCHED THEN
+					 UPDATE SET t.name=s.name,t.age=s.age,t.last_date=s.last_date
+				  WHEN NOT MATCHED THEN
+					   INSERT VALUES(s.id,s.name,s.age,s.last_date);
+				END;
+
+				--调用
+				CALL pro_append2('2024-04-01');	  
+				  
+				  
+				  
+		4.历史表加载：
+		      1.全量抽取过来的数据全部保留。（只适用于数据量比较小的情况）----------------全量抽取
+			    使用语句： insert  into...
+				在实际工作中，如果全量抽取数据，数据量比较小，数据也会发生变化，并且要保留所有数据的历史变化记录，则可以直接将
+				每天抽取过来的全量数据全部保存，但是一般会对数据进行分区保存，一天分一个区。
+				
+				
+				
+			  2.使用拉链表来保存历史数据。（适用于数据量比较大，并且要求保留历史数据的情况）------------------增量抽取
+			    使用语句：
+				      merge into ...
+					  insert into ....
+					  
+					  
+					  
+			    拉链表：是数据仓库中的一个概念，主要是用来解决数据仓库中缓慢变化维度问题，可以使用较少的空间来保存表中的所有的数据的历史变化状态。
+				        主要就是用来记录每一条数据从开始状态到当前多有发生的变化的数据的历史记录。
+						
+					拉链表中需要又两个列：
+					生效时间:该数据添加或者是修改的时间
+					失效时间：该条数据过期的时间，一般如果没有失效使用9999-12-31表示，如果失效了泽一般设置的时间就是抽取时间-1天
+                    拉链表使用场景：数据量比较大，并且表中的数据会发生变化，但是变化频率不高，还要保留表中每一条数据的历史变化信息，则可以使用拉链表。
+					
+					拉链表中的主要操作：
+					1.闭链（关链）：如果拉链表中的某一条数据发生了变化，则需要修改该条数据的失效时间为抽取时间-1天，叫做关链。
+					2.开链：将修改的数据或者是新增的数据再添加到拉链表中，作为数据的最新状态，叫做开链。
+					
+					
+				拉链表实现：
+				    1.先增量抽取数据。
+					2.将抽取到的数据和拉链表中现有的数据进行匹配（merge into）,找到能够匹配到的并且是最新的那一条数据，进行闭链操作（修改失效时间）。
+					3.将抽取过来的数据直接追加到拉链表中，进行开链操作（insert into）。
+				
+
+				--编写存储过程来实现拉链表
+				CREATE  OR REPLACE PROCEDURE pro_increment_his(work_date VARCHAR2)
+				IS
+				BEGIN
+				  --闭链操作
+				  MERGE INTO user_t_his t USING (SELECT * FROM user_t WHERE to_char(last_date,'yyyy-mm-dd')=work_date)s
+				  ON(t.id=s.id)
+				  WHEN MATCHED THEN
+					--修改失效时间
+					UPDATE SET end_date=to_date(work_date,'yyyy-mm-dd')-1 WHERE t.end_date=to_date('9999-12-31','yyyy-mm-dd');
+				  
+				  --开链
+				  INSERT INTO user_t_his
+				  SELECT t.*,
+				  to_date(work_date,'yyyy-mm-dd'),
+				  to_date('9999-12-31','yyyy-mm-dd') 
+				  FROM user_t t WHERE to_char(last_date,'yyyy-mm-dd')=work_date;
+				END;
+
+        拉链表效率问题解决方案：
+		  1.一般会在拉链表的生效时间和失效时间商创建索引来提高查询效率。
+		  2.创建部分拉链表来提高查询效率，部分拉链表其实就相当于从完整的拉链表中抽取出最近3个月或者是半年的数据单独放到一张表进行保存。
+		     
+        拉链表中如何查询数据：
+		  1.查询所有的最新的数据
+		    select * from 拉链表 where 失效时间=‘9999-12-31’;
+			--查询拉链表中最新的数据
+			SELECT * FROM user_t_his WHERE end_date=to_date('9999-12-31','yyyy-mm-dd');
+          2.查询某一个时间节点的切片数据
+		    select * from 拉链表 where 生效时间<=时间节点  and 失效时间>=时间节点；
+			
+			--查询4月2号的切片数据
+			SELECT * FROM user_t_his WHERE begin_date<=to_date('2024-04-02','yyyy-mm-dd')
+			AND end_date>=to_date('2024-04-02','yyyy-mm-dd');
+
+
+拉链表
+1     xiaoming     123456       2024-4-1        9999-12-31
+2     xiaobai      123456       2024-4-1        9999-12-31
+
+4-3号xiaoming修改了密码
+
+全量表实现
+1     xiaoming     123456       
+2     xiaobai      123456       
+1     xiaoming     666666      
+2     xiaobai      123456 
+
+拉链表实现
+1     xiaoming     123456       2024-4-1        2024-4-2
+2     xiaobai      123456       2024-4-1        9999-12-31
+1     xiaoming     666666       2024-4-3        9999-12-31
+
+4-4号xiaoming修改了密码
+全量表实现
+1     xiaoming     123456       
+2     xiaobai      123456       
+1     xiaoming     666666      
+2     xiaobai      123456 
+1     xiaoming     888888      
+2     xiaobai      123456 
+
+拉链表实现
+1     xiaoming     123456       2024-4-1        2024-4-2
+2     xiaobai      123456       2024-4-1        9999-12-31
+1     xiaoming     666666       2024-4-3        2024-4-3
+1     xiaoming     888888       2024-4-4        9999-12-31
+						
+						
+
+抽取的数据  4-5号
+1    xiaoming      77777
+3    xiaohei      123456
+
+
+1     xiaoming     123456       2024-4-1        2024-4-2
+2     xiaobai      123456       2024-4-1        9999-12-31
+1     xiaoming     666666       2024-4-3        2024-4-3
+1     xiaoming     888888       2024-4-4        2024-4-4
+1     xiaoming      77777       2024-4-5        9999-12-31
+3     xiaohei       123456      2024-4-5        9999-12-31
+
+
+
+     增量剥离：
+	    将源表中的数据和目标表中的数据进行对比，找出新增，修改以及删除的数据。
+		实现步骤：
+		1.将源表和目标表进行全连接，还要将能够匹配到的数据过滤掉，找出新增或者是修改的数据。
+		  如果全连接之后左表有，但是右表没有则代表新增，如果左边没有，右表有则代表删除。
+		2.将源表和目标表进行内连接，使用where条件过滤出来匹配到但是最表和右表中有不一样的数据，代表是进行修改的数据。
+		3.将第一步和第二步的结果进行union all到一起然后添加到增量剥离的表中。
+		--编写一个增量剥离的存储过程
+		CREATE OR REPLACE PROCEDURE pro_increment_1
+		IS
+		BEGIN
+
+		--加载数据
+		INSERT INTO user_t_change
+		--找出新增和删除的数据
+		SELECT NVL(t2.id,t1.id),
+			   NVL(t2.name,t1.name),
+			   NVL(t2.age,t1.age),
+			   NVL(t2.last_date,t1.last_date),
+			   NVL2(t2.id,3,1)   
+		 FROM user_t t1 FULL JOIN user_t1 t2 ON t1.id=t2.id WHERE t1.id IS NULL OR t2.id IS NULL
+		 UNION ALL
+		--找出修改的数据
+		SELECT t1.*,2   
+		 FROM user_t t1  JOIN user_t1 t2 ON t1.id=t2.id WHERE  t1.name<>t2.name OR t1.age<>t2.age OR t1.last_date<>t2.last_date ;
+
+		END;
+				
+		
+		
+
+源表
+1    xiaoming     18
+2    xiaobai      19
+3    xiaohong     20
+
+
+
+目标表
+1    xiaoming    17
+4    xiaohei     20
+
+
+
+找出：新增，删除，修改的数据
+
+
+
+
+
+ETL开发流程：
+  1.理解需求：
+  2.数据探查：
+    对源数据的探查，主要就是要了解提供的业务数据有些，有一些什么表，表中有什么列，列数据类型是什么，表和表之间关系是什么，
+	还要了解表中的数据的质量情况，是否存在过多的重复值，缺失值等等。
+  3.程序开发：
+    ETL过程的脚本编写（主要就是存储过程，shell脚本,python脚本等等）
+  4.流程依赖：
+    如果需要自动化执行脚本，则必须要考虑脚本之间的依赖关系，然后再借助于调度工具设置流程依赖。
+  5.配置调度：
+    将上面配置好的流程依赖进行打包，然后利用一些调度工具来实现自动化调度。
+	
+	
+	
+电信计费分析：
+1.需求：1.分析2018年的第二个季度各个产品的收入情况。
+          产品名称    季度名称      收入  
+
+
+        2.分析2018年第二个季度各个客户贡献度。
+		  客户编号   客户姓名      季度名称       话费         占比
+	  
+2.数据探查：
+    源系统中有3张数据表：
+      1.客户表：记录客户的基本信息以及客户所使用的产品id
+	  2.通话记录表：每次通话手机号，通话时长
+	  3.产品表：产品信息：基础费用，免费通话时长，超出免费时长的费用等等
+	  
+3.程序开发：
+     主要就是编写ETL过程脚本
+     数据处理主要分为3层：
+	 ODS层：贴源层，也就是原始数据层，主要保存抽取过来的原始数据，一般数据结构和源系统的数据结构一样。
+	       从源系统到贴源层抽取数据的方式：全量抽取----直接覆盖
+		   抽取脚本：存储过程  
+		   
+		   
+		   
+	 DW层：
+	        从ods层抽取处理数据加载到dw层：全量抽取----直接覆盖
+		物理模型的字段：
+        月份 客户编号   客户姓名   手机号     产品编号    产品名称   通话时长    基础费用     额外费用      总费用		
+			
+			
+	 DM层：对数据按照主题进行切片汇总
+	        从dw层抽取数据处理数据加载到dm层：全量抽取------直接覆盖
+			主要有两个主题模型：
+			 客户主题：
+			 客户编号    客户姓名   月份       月话费    季度名称       季度话费         
+			 
+			 产品主题：
+			 产品编号    月份     月收入    季度     季度收入
+   	  

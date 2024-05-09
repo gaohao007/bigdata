@@ -1,0 +1,385 @@
+1.行列转换
+/*
+纵向表：
+sname      cname      score
+小明        语文       99
+小明        数学       100
+小明        英语       90
+小白        语文       80
+小白        英语       90
+
+--转换之后的结果
+
+横向表
+sname    语文       数学      英语
+小明     99         100        90
+小白     80                    90
+
+*/
+--行转列：将纵向表转换成横向表
+--方式一：
+SELECT sname,SUM(CASE WHEN cname='语文' THEN score ELSE 0 END) 语文,
+             SUM(CASE WHEN cname='数学' THEN score ELSE 0 END) 数学,
+             SUM(CASE WHEN cname='英语' THEN score ELSE 0 END) 英语 FROM sc_t
+             GROUP BY sname;
+--方式二：
+SELECT sname,MAX(decode(cname,'语文',score,0)) 语文,
+             MAX(decode(cname,'数学',score,0)) 数学,
+             MAX(decode(cname,'英语',score,0)) 英语 FROM sc_t
+             GROUP BY sname;
+
+--方式三：使用pivot函数
+--语法：select * from 表名 pivot(sum(数据列) for 要转换成列名的列 in(值 别名,值 别名,.....))
+SELECT * FROM sc_t PIVOT(MAX(score) FOR cname IN ('语文' 语文,'数学' 数学,'英语' 英语))
+
+SELECT sname,语文,数学,英语,(nvl(语文,0)+nvl(数学,0)+nvl(英语,0)) 总分 FROM sc_t PIVOT(SUM(score) FOR cname IN('语文' 语文,'数学' 数学,'英语' 英语))
+
+
+
+
+
+SELECT * FROM (SELECT years,MONTHS,amount FROM zye4) PIVOT(MAX(amount) FOR MONTHS IN(1 m1,2 m2,3 m3,4 m4))
+
+SELECT years,SUM(CASE WHEN MONTHS=1 THEN amount ELSE 0 END) m1,
+             SUM(CASE WHEN MONTHS=2 THEN amount ELSE 0 END) m2,
+             SUM(CASE WHEN MONTHS=3 THEN amount ELSE 0 END) m3,
+             SUM(CASE WHEN MONTHS=4 THEN amount ELSE 0 END) m4 FROM zye4
+             GROUP BY years;
+			 
+--列转行：将横向表转换成纵向表
+			 
+--方式一：
+SELECT sname,'语文' cname,语文 score FROM sc_tt WHERE 语文 IS NOT NULL
+UNION 
+SELECT sname,'数学' cname,数学 score FROM sc_tt WHERE 数学 IS NOT NULL
+UNION
+SELECT sname,'英语' cname,英语 score FROM sc_tt WHERE 英语 IS NOT NULL;
+--方式二：使用unpivot函数
+--语法：select * from 表名 unpivot(自定义数据列名 for 自定义列名 in(列名,列名,....))
+SELECT * FROM sc_tt UNPIVOT(score FOR cname IN(语文,数学,英语))
+
+
+2.开窗函数
+   在现有的查询结果的基础上添加一些窗口列，用来现实汇总或者是处理的数据结果。
+   语法结构：
+     ..... 函数() over([partition by 分组列,...][order by 排序列 desc|asc][定位框架])
+	 partition by：主要是按照指定的列对表中的数据进行分组操作，但是和groupby不一样，分组之后并不会将数据汇总成一行。
+	 order by:排序列
+	 定位框架：需要和order by一起使用
+	    语法：rows|range between 下边界 and 上边界；
+		rows:按照行进行累计操作
+		range:按照值的范围进行累计操作
+		默认定位框架：RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+		边界取值：
+		   UNBOUNDED PRECEDING：一直到第一行
+		   n preceding:往上n行
+		   current row:当前行
+		   n following:往下n行
+		   unbounded following:一直到最后一行
+		
+		--查询出每一年的在校人数
+		SELECT * FROM admit;
+		--计算三年制的学生人数
+		SELECT * FROM admit WHERE stu_len=3;
+
+
+		WITH tmp AS(
+		SELECT 2018 YEAR FROM dual 
+		UNION
+		SELECT 2019 YEAR FROM dual
+		UNION
+		SELECT 2020 YEAR FROM dual
+		UNION
+		SELECT 2021 YEAR FROM dual
+		UNION
+		SELECT 2022 YEAR FROM dual
+		UNION
+		SELECT 2023 YEAR FROM dual)
+		SELECT n.year,n.人数+m.人数 总人数 FROM(
+		SELECT tmp.year,nvl(NUM,0),stu_len,
+		SUM(nvl(NUM,0)) OVER(ORDER BY tmp.YEAR ROWS BETWEEN 3 PRECEDING AND CURRENT ROW) 人数 FROM tmp LEFT JOIN (SELECT * FROM admit WHERE stu_len=4) a 
+		ON tmp.year=a.year) n JOIN(
+		SELECT tmp.year,nvl(NUM,0),stu_len,
+		SUM(nvl(NUM,0)) OVER(ORDER BY tmp.YEAR ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) 人数 FROM tmp LEFT JOIN (SELECT * FROM admit WHERE stu_len=3) a 
+		ON tmp.year=a.year) m ON n.year=m.year
+				
+	 
+    开窗函数中常见的函数：
+	1.聚合函数：
+	   sum()
+	   max()
+	   min()
+	   count()
+	   avg()
+	   medium()
+	   注意：在开窗函数中如果聚合函数和order by一起使用则默认不会对所有的数据进行聚合，按照排序之后的方式进行累计聚合
+	2.排名函数：
+	   注意：排名函数必须要配合order by一起使用
+       row_number():忽略值重复的情况，直接现实一个连续的不重复的名次，相当于行号。
+       rank():相同的值名次一样，但是整个排名是跳跃的，不连续
+       dense_rank():相同的值相同的名次，并且排名连续。
+       
+	   --开窗函数
+		   SELECT e.*,row_number()OVER(ORDER BY sal DESC) row_num,
+           RANK()OVER(ORDER BY sal DESC)r ,
+           dense_rank() OVER(ORDER BY sal DESC) dens FROM emp e;
+
+	   
+	   
+	   使用场景：1.如果要对表中的数据进行排名，尤其是小组内排名则直接使用开窗函数。
+	   
+			--查询每门课程中前两名学生学号
+			SELECT * from(
+			SELECT sc.*,row_number()OVER(PARTITION BY cno ORDER BY score DESC)名次 FROM sc)
+			WHERE 名次<=2;
+	             2.用来解决一些连续性问题，解决思路：先按照分组按照日期进行排序，然后使用日期减去排序之后的名次，如果得到的结果相同则代表连续
+				   否则不连续。
+				--查询出连续2年夺冠的队伍。
+				SELECT team,rn,COUNT(*) FROM(
+				SELECT n.*,y-row_number()OVER(PARTITION BY team ORDER BY y ) rn FROM nba n) GROUP BY team,rn
+				HAVING COUNT(*)>=2
+				;
+				/*
+				显示的结果为：
+				 team     begin_year     end_year
+				 公牛     1991           1993
+				 公牛     1996           1998
+				 ....
+
+				*/
+				SELECT team,MIN(y) begin_year,MAX(y) end_year FROM(
+				SELECT n.*,y-row_number()OVER(PARTITION BY team ORDER BY y ) rn FROM nba n)
+				GROUP BY team,rn HAVING MIN(y)<MAX(y)   
+				
+	 3.移位函数：			
+	   注意：必须要配合order by一起使用
+	   1.lag():下移函数
+	     语法：lag(列名,n[,空值替换值]) over(....order by ....)
+	   
+	   2.lead():上移函数
+	     	     语法：lag(列名,n[,空值替换值]) over(....order by ....)
+				 
+		使用场景：计算环比和同比
+		--将员工的工资进行下移一行
+		SELECT e.*,LAG(sal,1) OVER(ORDER BY sal) FROM emp e;
+
+		--计算每一个月的同比率和环比率
+		SELECT MONTHS,sell,round((sell-同比)/同比*100,2)||'%' 同比率,
+		ROUND((sell-环比)/环比*100,2)||'%' 环比率 from(
+		SELECT s.*,LAG(sell,12) over(ORDER BY MONTHS) 同比,
+		LAG(sell,1)OVER(ORDER BY MONTHS)环比 FROM sales s);
+			   
+
+3.正则函数
+   正则表达式：主要就是用来描述一个字符串规则的一种语言。
+   1.基础元字符：(一个元字符只能匹配一个字符)
+     .:用来匹配除了换行符之外的任意的一个字符
+	 \d:用来匹配一个数字（0-9）
+	 \w:用来匹配一个字母或者数字或者是下划线或者汉字。
+	 \s:用来匹配任意的一个空白符
+	 \b:用来匹配一个单词的开始或者是结束
+	 ^:用来代表一个字符串的开始
+	 $:用来代表一个字符串的结束
+
+    描述一个有5个数字组成的字符串
+	^\d\d\d\d\d$     ^\d{5}$
+	2.重复设置：用来限定元字符出现的次数
+	 *：代表元字符可以出现任意的次数，包括0次     ^\d*\w$     12345    s
+	 +：代表元字符至少要出现1次                    ^\d+\w$     1234r          1r
+	 ?: 代表元字符最多只能出现1次                  ^\d?\w$      1y   y
+	 {n}:代表元字符必须要出现n次                    
+     {n,}:代表最少要出现n次                         ^\d{5,}\w$    12345678h   
+	 {n,m}:代表最少出现n次，最多出现m次              ^\d{3,7}\w$    123u   12345k  
+
+    3.设置取值的限定
+	  使用[]来限定取值范围
+	  [a-z]:代表所有的小写字母
+	  [A-Z]:代表所有的大写字母
+	  [a-zA-Z]:代表所有的大小写字母
+	  [a-zA-Z0-9]:所有的字母和数字
+	  [356789]:
+	  [asd]:只能选择a或者s或者d
+	  [*+?]:只能在*或者+或者？中选择一个
+	
+    描述一个有效的手机号
+	^1[356789]\d{9}$
+	描述一个员工的姓名必须有5个字母组成
+	^[a-zA-Z]{5}$
+	描述一个字符串，必须要A或者S开头，第二个字符必须要是Q,后面要接3个数字，但是不能包含0-2，最后必须要一个字母结尾
+	^[AS]Q[3-9]{3}[a-zA-Z]$     AQ345t
+    4.分支设置：如果一个字符串有多种匹配规则，则可以使用分支符号”|“来设置
+	
+	 描述一个座机号：规则：0XX-XXXXXXXX   0XXX-XXXXXXX
+	 
+	 ^0\d{2}-\d{8}|0\d{3}-\d{7}$
+	 
+	5.反义字符：
+	  \D:匹配除了数字之外的任意字符
+	  \W:匹配除了数字，字母，下划线，汉字之外的任意字符
+	  \S:匹配除了空白符之外的任意字符
+	  \B：匹配不是一个单词的开始或者结束
+	  [^X]:匹配除了X之外的任意字符
+	  [^0-3]:匹配除了0-3之外的任意字符
+	  
+	6.转义字符：
+	   如果一个字符串中出现了元字符本身，则在面熟字符串的时候需要在字符前面设置一个转义字符”\“
+	   taobao.com
+	   ^[a-z]{6}\.[a-z]{3}$
+	   
+	7.正则表达式中的分组
+	  在正则表达式中使用()进行分组，一个组作为一个整体来使用。
+	  1.一个组可以作为一个整体来使用
+	    描述一个由ab组成的字符串，例如：abababababab
+	  ^[ab]+$                aaaaaabbbbbaaa
+	  ^(ab)+$                abababababab
+	  2.可以通过分组来实现分支结构
+	    描述一个字符串：hello python 或者hello oracle
+		^hello (python|oracle)$
+		^hello python | hello oracle$
+	  3.可以实现分组引用
+        日期列
+		2024-03-14
+		2024/03-15
+		2024.03.16
+		2024/03/17
+		2024-03/18
+		
+		^\d{4}[.-/]\d{2}[.-/]\d{2}$
+		如果要求日期中前后符号必须要一直，则需要使用分组引用
+		^\d{4}(-|\.|\/)\d{2}\1\d{2}$
+		
+	注意：使用()对正则表达式进行分组，分组之后系统会为每一个组分配一个编号，编号从1开始 ,
+	如果要引用某一组的值，则直接使用\n   n代表组编号。
+	  
+	 
+    正则函数：
+	 1.regexp_like(列名,'正则表达式'):功能类似于like关键字，但是比like功能强大
+	 
+	 --查询员工的姓名以S开头的员工信息
+	SELECT * FROM emp WHERE ename LIKE 'S%';
+	SELECT * FROM emp WHERE regexp_like(ename,'^S');
+	--查询姓名以’T‘结尾的员工
+	SELECT * FROM emp WHERE regexp_like(ename,'T$');
+	--查询员工的姓名第一个字母必须是O,并且名字的长度必须是5的大写字母。
+	SELECT * FROM emp WHERE regexp_like(ename,'^[A-Z]O[A-Z]{3}$')
+	--查询出来由有效手机号的行
+	SELECT * FROM regexp_t WHERE regexp_like(str,'1[356789]\d{9}');
+	--过滤出来有效的日期，前后的符号必须要一致
+	SELECT * FROM REGEXP_t WHERE regexp_like(str,'^\d{4}(-|\.|\/)\d{2}\1\d{2}$')
+	--过滤出来有效的域名
+	SELECT * FROM regexp_t WHERE regexp_like(str,'^[a-z]{6}\.[a-z]{3}$');
+		 
+	 2.regexp_instr(字符串,'正则表达式'[,i,j]):功能和instr类似，用来在一个字符串中查找正则表达式所描述的子字符串出现的位置
+	                 i:代表开始查找的位置
+					 j:代表第几次出现
+					 
+		--查找有效手机号的位置
+		SELECT str,regexp_instr(str,'1[356789]\d{9}') FROM regexp_t;
+		--查找数字第二次出现的位置
+		SELECT regexp_instr('qwqweq223dssdgsdf547hbfb','\d+',1,2) FROM dual;			 
+					 
+	 3.regexp_substr(字符串,'正则表达式'[,i,j]):从字符串中截取正则表达式描述的子字符串
+		--截取字符串中有效的手机号
+		SELECT str,regexp_substr(str,'1[356789]\d{9}') FROM regexp_t;
+
+		--qqqq,wwww,rrrr,tttt
+		--截取字符串中以逗号分开的第二部分数据
+		SELECT regexp_substr('qqqq,wwww,rrrr,tttt','[^,]+',1,2) FROM dual;
+	 
+	 
+	 4.regexp_replace(字符串,'正则表达式','新值'):将字符串中正则表达式描述的部分使用新的字符串替换。
+	    --将字符串中的空白符替换为*
+		SELECT regexp_replace('qwe   qwe qw      ewr erwe   wer','\s+','*') FROM dual;
+
+		SELECT replace('qwe   qwe qw      ewr erwe   wer',' ','*') FROM dual;
+		--将字符串中的手机号替换为****
+		SELECT str,regexp_replace(str,'1[356789]\d{9}','****') FROM regexp_t;
+		--将字符串中的手机号中间四位替换为****
+		SELECT str,regexp_replace(str,'(1[356789]\d)(\d{4})(\d{4})','+86 \1****\3') FROM regexp_t;
+	 
+	 
+	 5.regexp_count(字符串,'正则表达式'):统计正则表达式描述的字符串在字符串中出现的次数
+		--统计逗号出现的次数
+		SELECT regexp_count('qqqq,wwww,rrrr,tttt',',') FROM dual;
+		--统计有效手机号出现的次数
+		SELECT str,regexp_count(str,'1[356789]\d{9}') FROM regexp_t;
+
+
+4.层级操作
+  在Oracle中层级使用的connect by来实现
+  1.层级的语法结构
+    select * from 表名 [where 条件]
+	[start with 条件1]
+	connect by 条件2
+	[order [siblings] by 排序字段 desc|asc]
+	
+	说明：start with 条件1：用来设置层级结构中的根节点的条件
+	     connect by 条件2：用来设置父子节点之间关联条件或者递归的次数
+		 siblings:如果设置了该参数则代表组织内部进行排序
+		 
+		
+	--查询员工的姓名以及他领导的姓名
+	SELECT ename,PRIOR ename FROM emp
+	START WITH mgr IS NULL
+	CONNECT BY mgr=PRIOR empno;
+
+	--查询工资大于他领导的工资的员工
+	SELECT ename,sal,PRIOR ename,PRIOR sal FROM emp WHERE sal>PRIOR sal
+	START WITH mgr IS NULL
+	CONNECT BY mgr=PRIOR empno;
+   		
+	层级常见的关键字：
+	  1.prior:代表父节点
+	        语法：prior 列名   
+      2.connect_by_root:获取一个层级结构中的根节点
+	  
+		--查询员工的信息以及最大领导的姓名
+		SELECT e.*,connect_by_root ename FROM emp e START WITH mgr IS NULL
+		CONNECT BY mgr=PRIOR empno
+	  3.connect_by_isleaf:用来判断一个节点是否是叶子节点，如果返回0则代表不是，如果返回1则代表是
+	    
+		--查询所有的基层员工（没有下属的员工）
+		SELECT e.*,connect_by_isleaf FROM emp e WHERE connect_by_isleaf=1 START WITH mgr IS NULL
+		CONNECT BY mgr=PRIOR empno
+	  4.sys_connect_by_path(列名,'分隔符')：返回一个节点完整的层级路径
+	  --显示每一个员工的所有领导
+		SELECT e.*,connect_by_isleaf,
+		 sys_connect_by_path(ename,'/')
+		 FROM emp e  START WITH mgr IS NULL
+		CONNECT BY mgr=PRIOR empno
+		ORDER  SIBLINGS BY sal;
+      5.level:返回层级，数字越大层级越小
+	     --显示每一个员工的所有领导以及层级
+		SELECT e.*,connect_by_isleaf,
+		 sys_connect_by_path(ename,'/'),LEVEL 层级
+		 FROM emp e  START WITH mgr IS NULL
+		CONNECT BY mgr=PRIOR empno
+		ORDER  SIBLINGS BY sal;
+		
+		
+		
+   使用场景：1.构建层级关系：通过层级关系来查询表中的父子节点之间的数据，例如：领导和员工    省和市
+             2.可以通过层级递归来生成一些序列号--------主要使用level
+			    --生成1-10数字
+				SELECT LEVEL FROM dual CONNECT BY LEVEL<=10;
+				--生成2018-2024年份
+				SELECT 2018+LEVEL-1 FROM dual CONNECT BY LEVEL<=6
+				--生成8.1---8.31号
+				SELECT to_date('2024-8-1','yyyy-mm-dd')+LEVEL-1 FROM dual CONNECT BY LEVEL<=31
+
+				--生成26个大写字母
+				SELECT chr(ASCII('A')+LEVEL-1) FROM dual CONNECT BY LEVEL<=26;
+				
+				
+				
+				
+listagg():必须要和group by一起使用，将分组之后某一列数据拼接在一起
+语法：select 分组列,listagg(列名,'拼接符') within group(order by 排序列) from 表名 group by  分组列;
+--查询每个部门中所有的员工的姓名
+SELECT deptno,listagg(ename,',')WITHIN GROUP(ORDER BY sal) FROM emp GROUP BY deptno
+
+--查询和's002'学生学习课程一样的学生的学号
+SELECT * FROM(
+SELECT sno,listagg(cno,'-')WITHIN GROUP(ORDER BY sno) a FROM sc GROUP BY sno)
+WHERE a=(SELECT listagg(cno,'-')WITHIN GROUP(ORDER BY sno) a FROM sc WHERE sno='s002' GROUP BY sno)
+AND sno<>'s002';

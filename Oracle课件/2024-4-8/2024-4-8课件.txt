@@ -1,0 +1,399 @@
+1.oracle数据库的优化（重点）
+  1.在设计阶段优化：
+    1.考虑是否要使用物化视图来提高查询效率(业务系统中使用比较多)
+	  (1)如果要经常从远程的服务器获取一些数据，并且这些数据的变化频率不高，则可以在本地创建对应的物化视图来提高查询效率。
+	  (2)如果要经常基于多张表关联结果进行查询，则可以将多张表关联的结果创建为一个物化视图来提高查询效率。
+	2.考虑是否要使用表分区来进行提高查询效率。
+	   如果表中的数据量比较大，并且要经常基于某一些列来进行数据查询操作，则可以考虑在这些列上创建分区，从而提高查询效率。
+	3.考虑是否要在表上创建索引。
+	  
+	   
+  2.在开发阶段进行优化：
+    1.sql语句以及PL/SQL块优化。
+    2.学会查看执行计划
+    3.使用hints来修改执行计划	
+
+
+
+1.数据库中的表分区：
+  Oracle是最早提出表物理分区的数据库，在Oracle8.0版本中就已经加入表分区。
+  作用：1.提高查询效率
+        2.提高程序的可用性
+		
+   建议：1.尽量将表中的不同的分区的数据保存到不同的表空间。
+         2.分区一般要在表创建的时候就确定好，因为如果创建表的时候没有分区，后期不允许在该表上进行分区。
+		 
+   查询分区表的数据字典：
+      dba_tab_partitions:查询所有的表的主分区数据字典
+	  SELECT * FROM Dba_Tab_Partitions WHERE table_name='表名';
+	  SELECT * FROM Dba_Tab_Partitions WHERE table_name='RANGE_TABLE';
+	  dba_tab_subpartitions:查询所有的表的子分区数据字典
+	  
+   Oracle中表分区的分类：
+       1.范围分区：
+	       是数据库中使用最广泛的分区，主要是根据某一列的值得范围将数据保存到不同的分区中。
+		   注意：范围分区的列必须要是数字类型或者是日期时间类型
+		   关键字：range
+		   
+		分区语法：
+          create table 表名(
+		   ..........
+		  )partition by range(列名,列名,...)
+		  (
+		    partition 区名1 values less than(上限,上限,......)[tablespace 表空间名],
+			partition 区名2 values less than(上限,上限,......)[tablespace 表空间名],
+			........
+		  );
+	   
+	    查询某一个分区中的数据语法：
+		select * from 表名 partition(分区名);
+		SELECT * FROM range_table PARTITION(par3);
+		
+		注意：1.当在分区表中使用where条件进行过滤，系统会自动进行分去过滤，只会查询对应分区的数据，从而提高查询效率。
+		      2.同一张表中分区名称不允许重复。
+			  3.除了第一个分区没有下限之外，其他的分区都有一个隐含的下限，就是上一个分区的上限，并且每一个分区不包含上限的值。
+			  4.可以使用maxvalue来保存现有的分区之外的所有的数据。
+	   
+	   --创建一个表，按照日期进行范围分区
+		CREATE TABLE range_table(
+		  ID NUMBER,
+		  NAME VARCHAR2(20),
+		  r_date DATE
+		)PARTITION BY RANGE(r_date)
+		(
+		   PARTITION par1 VALUES LESS THAN(to_date('2024-1-1','yyyy-mm-dd')) TABLESPACE tbs_1,
+		   PARTITION par2 VALUES LESS THAN(to_date('2024-4-1','yyyy-mm-dd')) TABLESPACE tbs_2,
+		   PARTITION par3 VALUES LESS THAN(to_date('2024-7-1','yyyy-mm-dd')) TABLESPACE tbs_3,
+		   PARTITION par4 VALUES LESS THAN(to_date('2024-10-1','yyyy-mm-dd')) TABLESPACE tbs_4 
+		);
+
+		--添加数据
+		INSERT INTO range_table VALUES(1,'xiaoming',to_date('2023-10-8','yyyy-mm-dd'));
+		INSERT INTO range_table VALUES(2,'xiaobai',to_date('2024-5-8','yyyy-mm-dd'));
+		SELECT * FROM range_table WHERE r_date=to_date('2024-5-8','yyyy-mm-dd');
+		SELECT * FROM range_table PARTITION(par3);
+
+	   
+	   2.列表分区：
+	     关键字：list
+		 如果要经常查询的列的数据值是固定的，并且数量是有限的，可以一一列举出来，则可以使用列表分区。
+		 语法：
+	        create table 表名(
+		   ..........
+		  )partition by list(列名)
+		  (
+		    partition 区名1 values(值)[tablespace 表空间名],
+			partition 区名2 values(值)[tablespace 表空间名],
+			........
+		  );
+	   
+	    --创建一个客户表，按照客户省份进行列表分区
+		CREATE TABLE list_table(
+		 ID NUMBER,
+		 NAME VARCHAR2(20),
+		 sheng VARCHAR2(20)
+		)PARTITION BY LIST(sheng)
+		(
+		  PARTITION par1 VALUES('广东') TABLESPACE tbs_1,
+		  PARTITION par2 VALUES('广西') TABLESPACE tbs_2,
+		  PARTITION par3 VALUES('湖南') TABLESPACE tbs_3
+		);
+		--添加数据
+		INSERT INTO list_table VALUES(1,'小明','广东');
+		INSERT INTO list_table VALUES(2,'小白','广西');
+		INSERT INTO list_table VALUES(3,'小红','湖南');
+
+		SELECT * FROM list_table PARTITION (par2);
+		SELECT * FROM list_table WHERE sheng='广西';
+	   
+	   
+	   3.散列分区：
+	     关键字：hash
+		 如果经常查询的列不能使用范围和列表进行分区，但是又要对数据进行分区则可以使用hash分区
+		 
+		 语法一：
+		  create table 表名(
+		   ..........
+		  )partition by hash(列名)
+		  (
+		    partition 区名1 [tablespace 表空间名],
+			partition 区名2 [tablespace 表空间名],
+			........
+		  );
+	    语法二：分区的名称由系统生成
+		   create table 表名(
+		   ..........
+		  )partition by hash(列名)
+		  partitions n store in(表空间,表空间,.....);
+		  
+		
+	   --创建一个散列分区，按照客户的姓名进行分区
+		CREATE TABLE hash_table1(
+		 ID NUMBER,
+		 NAME VARCHAR2(20),
+		 sheng VARCHAR2(20)
+		)PARTITION BY HASH(NAME)
+		(
+		  PARTITION par1 TABLESPACE tbs_1,
+		  PARTITION par2  TABLESPACE tbs_2,
+		  PARTITION par3  TABLESPACE tbs_3
+		);
+		--系统生成分区名
+		CREATE TABLE hash_table2(
+		 ID NUMBER,
+		 NAME VARCHAR2(20),
+		 sheng VARCHAR2(20)
+		)PARTITION BY HASH(NAME)
+		PARTITIONS 3 STORE IN(tbs_1,tbs_2,tbs_3);
+
+		--添加数据
+		INSERT INTO hash_table1 VALUES(1,'小明','广东');
+		INSERT INTO hash_table1 VALUES(2,'小白','广西');
+		INSERT INTO hash_table1 VALUES(3,'小红','湖南');
+
+		SELECT * FROM hash_table1 PARTITION(par3);
+		 
+		 
+	   4.混合分区：二级分区
+	     如果通过以上的分区之后每一个分区重点额数据量依旧很大，则可以使用二级分区。
+		 将以上分区进行自由组合，形成一个二级分区，也就是说一个主分区下面还可以由多个子分区。
+	     常见的组合：
+		   范围----范围
+		   范围----列表
+		   列表----范围
+		   ........
+		   
+		创建语法：  
+		  create table 表名(
+		   ..........
+		  )partition by range|list|hash(主分区列名)
+		  subpartition by range|list|hash(子分区列名)
+		  (
+		    partition 主分区名1 [values less than(上限)]|[values (值)] [tablespace 表空间名]
+			(
+			  subpartition 子分区名1 [values less than(上限)]|[values (值)] [tablespace 表空间名],
+			  subpartition 子分区名2 [values less than(上限)]|[values (值)] [tablespace 表空间名],
+			  .....
+			)
+			,
+			partition 主分区名2 [values less than(上限)]|[values (值)][tablespace 表空间名]
+			(
+			  subpartition 子分区名1 [values less than(上限)]|[values (值)] [tablespace 表空间名],
+			  subpartition 子分区名2 [values less than(上限)]|[values (值)] [tablespace 表空间名],
+			  .....
+			)
+			,
+			........
+		  );
+		   
+		 --创建一个销售表，先按照日期对数据进行范围分区，然后再按照地区进行列表分区
+		CREATE TABLE sales_t1(
+		 s_date DATE,
+		 sheng VARCHAR2(20),
+		 amount NUMBER
+		)
+		PARTITION BY RANGE(s_date)
+		SUBPARTITION BY LIST(sheng)
+		(
+		 PARTITION par1 VALUES LESS THAN(to_date('2024-1-1','yyyy-mm-dd')) TABLESPACE tbs_1
+		 (
+		  SUBPARTITION par1_sub1 VALUES('广东'),
+		  SUBPARTITION par1_sub2 VALUES('广西'),
+		  SUBPARTITION par1_sub3 VALUES('湖南')
+		 ),
+		PARTITION par2 VALUES LESS THAN(to_date('2024-4-1','yyyy-mm-dd')) TABLESPACE tbs_2
+		 (
+		  SUBPARTITION par2_sub1 VALUES('广东'),
+		  SUBPARTITION par2_sub2 VALUES('广西'),
+		  SUBPARTITION par2_sub3 VALUES('湖南')
+		 ),
+		 PARTITION par3 VALUES LESS THAN(to_date('2024-7-1','yyyy-mm-dd')) TABLESPACE tbs_3
+		 (
+		  SUBPARTITION par3_sub1 VALUES('广东'),
+		  SUBPARTITION par3_sub2 VALUES('广西'),
+		  SUBPARTITION par3_sub3 VALUES('湖南')
+		 )
+		);
+
+		INSERT INTO sales_t1 VALUES(to_date('2024-6-1','yyyy-mm-dd'),'广东',1000);
+
+		SELECT * FROM sales_t1 SUBPARTITION(par3_sub1)  
+	   
+	   5.interval分区：是范围分区的升级版
+	      会按照设置好的时间间隔来自动创建不存在的分区。
+		  
+		  创建语法：
+		  create table 表名(
+		   ..........
+		  )partition by range(分区列名)
+		  interval(设置间隔)
+		  (
+		   partition 分区名 values less than (上限) [tablespace 表空间],
+		   ......
+		  );
+		 
+		 
+		 设置时间间隔的函数：
+		 numtoyminterval(n,'year|month'):主要设置年和月的间隔
+		 numtodsinterval(n,'day|hour|minuts|second'):设置天，小时，分钟，秒之间的间隔
+		 
+		 注意：1.间隔分区必须要实现创建好一个分区。
+		       2.间隔分区中第一个分区日期不能设置29，30和31号
+			   3.如果添加的数据超过了现有的分区的范围，则系统会自动创建分区，但是只会创建添加的日期对应的一个周期分区，
+			     如果事件是不连续的则中间的分区不会创建。
+  
+
+		--创建一个间隔分区
+		CREATE TABLE interval_table(
+		 ID NUMBER,
+		 NAME VARCHAR2(20),
+		 i_date DATE
+		)PARTITION BY RANGE(i_date)
+		INTERVAL(Numtoyminterval(1,'month'))
+		(
+		 PARTITION par1 VALUES LESS THAN(to_date('2024-3-28','yyyy-mm-dd'))
+		);
+
+		--添加数据
+		INSERT INTO interval_table VALUES(1,'qq',to_date('2024-2-28','yyyy-mm-dd'));
+		INSERT INTO interval_table VALUES(1,'qq',to_date('2024-3-28','yyyy-mm-dd'));
+		INSERT INTO interval_table VALUES(2,'ee',to_date('2024-6-18','yyyy-mm-dd'));
+		INSERT INTO interval_table VALUES(2,'ee',to_date('2024-5-18','yyyy-mm-dd'));
+		SELECT * FROM interval_table PARTITION(SYS_P84);
+		
+		
+   分区维护：
+    1.新增分区：
+	  注意：1.只能在分区表上新增分区，未分区的表不允许新增分区。
+	        2.新增范围分区的时候必须要保证新增的范围高于现有分区的最后一个分区的上限。
+		新增主分区：
+		  alter table 表名 add partition 分区名[values less than(上限)]|[values(值)] [tablespace 表空间];
+		  --新增分区
+		   ALTER TABLE range_table ADD PARTITION par6 VALUES LESS THAN(to_date('2024-12-1','yyyy-mm-dd')); 
+		   --添加分区
+			ALTER  TABLE list_table ADD PARTITION par4 VALUES('湖北');	
+		   --添加散列分区
+		   ALTER  TABLE hash_table1 ADD PARTITION par4;
+		新增子分区：
+		  语法：alter  table 表名 modify partition 主分区名 add subpartition 子分区名 [values less than(上限)]|[values(值)] [tablespace 表空间];
+		  --在主分区par1中添加一个子分区
+			ALTER TABLE sales_t1 MODIFY PARTITION par1 ADD SUBPARTITION par1_sub4 VALUES('湖北');
+		  
+	
+	2.删除分区：
+	   注意：1.散列分区不允许删除。
+	         2.删除某一个分区则分区中的数据也会被删除。
+			 3.删除分区的时候一张表中至少要留有一个分区，如果要删除表中的所有的分区，则直接drop表。
+			语法：alter  table 表名 drop partition|subpartition 分区名;
+			--删除分区：
+			ALTER TABLE range_table DROP PARTITION par4;
+	
+	3.合并分区：
+	  注意：1.散列分区不允许合并
+	        2.只能讲低范围的分区合并到高范围的分区中，但是不能讲高的合并到低的中。
+		
+        语法：alter table 表名 merge partitions|subpartitions 分区1，分区2 into partition|subpartition 分区2；
+		--合并分区par2和par3合并
+		ALTER  TABLE range_table MERGE PARTITIONS par2,par3 INTO PARTITION par3;
+	
+	4.拆分分区：
+	   语法：
+	   alter table 表名 split partition 分区名 at(拆分上限)|values(值) into (partition 新分区名,partition 旧分区名)
+	   
+	   --拆分范围分区
+		ALTER  TABLE range_table SPLIT PARTITION par3 AT(to_date('2024-4-1','yyyy-mm-dd')) INTO (PARTITION par2,PARTITION par3);
+	   --拆分列表分区
+		ALTER TABLE list_table SPLIT PARTITION par2 VALUES('广西') into(PARTITION par1,PARTITION par2);
+
+	5.清空分区表的数据：
+       语法：
+        alter table 表名 truncate partition|subpartition 分区名;	   
+		--清除分区表par3中的数据
+		ALTER TABLE list_table TRUNCATE PARTITION par3;
+	
+
+ 2.Oracle数据库中索引：
+    索引：是数据库中的一个对象，是建立在一个列上或者是多个列上的一种数据结构，目的是为了提高查询效率。
+	关键字：index
+	优点：提高数据的查询效率
+	缺点：由于索引是占用物理空间，所以增加磁盘的开销，并且会影响数据库DML操作的效率。
+	
+	在oracle数据库中索引的分类：
+	从物理结构上分：
+	1.B树索引：
+	2.位图索引：
+	3.反向键索引：
+	4.函数索引：
+	5.分区索引：
+	
+	从逻辑结构分：
+	 单行索引：索引只添加在一个列上叫做单行索引
+	 组合索引：索引添加在多个列上
+	 唯一索引:索引的列中数据具有唯一性，例如主键索引
+	 非唯一索引：索引中的列的数据允许重复。
+	 
+	
+	
+	1.B树索引：
+	  是数据库中最常见的索引，也是Oracle数据库中默认的索引。
+	  创建语法：
+	  create [unique] index 索引名 on 表名(列名,列名,....);
+	  
+	  使用场景：1.比较适用于一些等值匹配，范围查找等等。
+	            2.比较适合于一些基数比较大的列。
+				
+	    --再emp表中的name列上创建一个索引
+		CREATE INDEX idx_name ON emp(ename);
+		--在ename和job上创建一个组合索引
+		CREATE INDEX indx_name_job ON emp(ename,job);
+	2.位图索引：
+      
+	  创建语法：create bitmap index 索引名 on 表名(列名,...);
+	  --在job创建一个位图索引
+      CREATE BITMAP INDEX inx_job ON emp(job);
+	  使用场景：
+	       1.比较适合于一些分析系统比如数据仓库，因为业务系统会对数据进行频繁的修改操作，从而导致位图索引维护开销非常大。
+		   2.比较适合于一些基数比较小的情况，例如：性别，学历等等
+		   3.比较适合一些带有or操作的一些查询。
+		   
+    3.反向键索引：
+	  如果在创建B树索引的时候索引列的值比较密集，这样不能狗很好的利用系统的并行操作来提高查询效率，
+	  可以讲索引列的值逆向存贮，这样就可以打破数据额度集中度。
+	  创建语法：
+	    create [unique] index 索引名 on 表名(列名,列名,....) reverse;
+		--在工资列上创建一个反向键索引
+		CREATE INDEX inx_sal ON emp(sal) REVERSE;
+	4.函数索引：
+	   
+	   语法：create index 索引名 on 表名(函数名(列名))
+	   使用场景：如果要经过函数处理之后再进行过滤的操作，则可以讲改函数创建成一个函数索引。
+       --函数索引
+		CREATE  INDEX inx_fun ON emp(UPPER(ename));
+	  
+	  
+
+
+  索引使用原则：
+	 要创建索引的情况：
+		 1.如果要经常从一张大表中基于某一个列或者是某几个列来过滤查询（where）.
+		 2.主键和外键上一般建议来创建索引，因为外键会经常用作关联条件来进行查询，所以可以提高关联查询的效率。
+		 3.经常进行排序或者是分组的列建议建立索引。
+     不需要创建索引的情况：
+        1.不经常查询的列。
+        2.小表不建议创建索引。
+        3.频繁的进行更新和插入的表不建议创建索引。		
+	  
+	  
+	索引失效的原因：
+     1.如果查询的数据量超过表的整体的数据量的30%以上，索引会失效	
+	 2.如果再索引列上使用了函数，则会导致索引失效。
+	 3.如果在索引列过滤的时候使用不等于，not等关键字的时候索引也会失效。
+	 4.如果在进行like模糊匹配的时候，并且如果使用的匹配模式以%开头，会导致索引失效。
+	 5.如果在索引列上使用算术运算符，则也会导致索引失效。
+	 6.如果使用的是B树索引，则使用is null或者是not is null也会导致索引失效。
+	 7.如果使用的是组合索引，但是在过滤的时候没有使用前置索引列则也会失效。
+	 8.如果在进行过滤的时候数据类型不匹配也会导致索引失效。
+	 
+	  
+	  
+	  

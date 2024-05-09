@@ -1,0 +1,62 @@
+create table CALL_RECORD
+(
+  call_id     INTEGER,
+  call_date   DATE,
+  call_type   VARCHAR2(20),
+  phone_no    VARCHAR2(20),
+  phone2_no   VARCHAR2(20),
+  begin_time  VARCHAR2(30),
+  region      VARCHAR2(20),
+  phone_model VARCHAR2(20),
+  time_long   NUMBER,
+  fee         FLOAT,
+  fields1     VARCHAR2(200),
+  fields2     VARCHAR2(200),
+  fields3     VARCHAR2(200),
+  fields4     VARCHAR2(200),
+  fields5     VARCHAR2(200)
+)；
+导入oltp_data.sql中的数据
+
+
+CREATE TABLE customer(
+  ID NUMBER,
+  cust_id NUMBER,
+  phone_no VARCHAR2(20),
+  NAME VARCHAR2(20),
+  create_time DATE,
+  address VARCHAR2(100),
+  cust_type NUMBER,
+  prod_id VARCHAR2(20),
+  credit_rank VARCHAR2(5)
+);
+导入cust_info.csv中的数据
+
+
+create table PRODUCT
+(
+  prod_id         VARCHAR2(40),
+  prod_desc       VARCHAR2(40),
+  basic_fee       NUMBER,
+  mf_time         VARCHAR2(40),
+  call_minute_fee NUMBER(7,2),
+  mf_flow         VARCHAR2(40),
+  flow_minute_fee NUMBER(7,2)
+)；
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G58', '58元畅享套餐', 58, '30', .19, '6G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G78', '78元畅享套餐', 78, '50', .19, '20G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G98', '98元畅享套餐', 98, '150', .19, '30G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G168', '168元畅享套餐', 168, '450', .19, '30G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G198', '198元畅享套餐', 198, '700', .19, '50G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G288', '288元畅享套餐', 288, '1200', .19, '50G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G388', '388元畅享套餐', 388, '2000', .19, '100G', .29);
+insert into PRODUCT (prod_id, prod_desc, basic_fee, mf_time, call_minute_fee, mf_flow, flow_minute_fee)
+values ('4G588', '588元畅享套餐', 588, '40000', .19, '150G', .29);
+commit;

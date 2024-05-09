@@ -1,0 +1,412 @@
+1.视图和物化视图：
+    注意：如果创建视图和物化视图的时候提示权限不够，则需要授权
+	  grant create view,create materialized view to scott;
+
+  
+  1.视图：view
+       是数据库中的一个对象，可以将视图看作是一张虚表，因为视图中是不保存数据，数据是来自于视图中所关联的物理表。
+	   
+	   语法：
+	   create or replace view [(列名，列名,....)]
+	   as
+	   select语句
+	   [with read only];
+	视图作用：
+        1.可以简化sql语句的编写，提高代码的重用性，但是不能提升执行效率。
+        2.视图可以用来保护一些敏感数据，因为可以创建视图来只显示需要显式的列，不显示的列直接不查询，然后授予视图查询权限。
+    视图特点：
+         1.视图不会保存具体的表中的数据，不会占用物理空间，只是保存一条sql语句，所以数据还是来自于关链的物理表。
+         2.视图必须要依赖于物理表，如果物理表不存在，视图也就没有意义。
+         3.视图一般只进行查询，很少进行增删改。		 
+		 
+		 
+	视图分类：
+	     1.简单视图：基于一张表创建的视图，并且没有一些分组和聚合操作。
+		   特点：如果没有设置with read only可以进行增删改操作，但是在修改的时候并不是修改的视图，而是对应的物理表。
+		    
+		 2.复杂视图：主要对于sql语句中有分组聚合或者是多表关联操作的一些视图。
+		   特点：1.如果是一些分组聚合的复杂视图，则不允许进行增删改操作。
+		         2.如果是多表关联的复杂视图，不允许一次性操作多张基表的数据，如果通过视图来修改多张基表，则可以使用替换触发器来完成。
+		 
+    --查询员工的工资最高的员工的信息
+	SELECT * FROM(
+	SELECT * FROM emp ORDER BY sal DESC) WHERE ROWNUM=1;
+
+	--创建一个视图，保存员工工资降序排序后的结果
+	CREATE OR REPLACE VIEW view_emp_sal
+	AS
+	SELECT * FROM  emp ORDER BY sal DESC;
+	SELECT * FROM view_emp_sal WHERE ROWNUM=1;
+	SELECT * FROM view_emp_sal WHERE ROWNUM<=3;
+	--将视图中的7369员工共的工资上调20%
+	UPDATE view_emp_sal SET sal=sal*1.2 WHERE empno=7369;
+
+	--创建一个视图，用来隐藏员工的工资和奖金
+	CREATE OR REPLACE VIEW View_Emp
+	AS
+	SELECT empno,ename,job,mgr,hiredate,deptno FROM emp;
+
+	SELECT * FROM View_Emp;
+
+
+	--创建一个视图，计算每一个部门的平均工资
+	CREATE OR REPLACE VIEW view_sal(dno,avg_sal)
+	AS
+	SELECT deptno,AVG(sal) FROM emp GROUP BY deptno;
+
+	SELECT * FROM view_sal;
+	--有聚合函数的视图是不允许修改。
+	--UPDATE view_sal SET avg_sal=3000 WHERE dno=20
+
+
+	--创建视图，将员工表和部门表进行关联
+	CREATE OR REPLACE VIEW view_e_d
+	AS
+	SELECT e.*,dname,loc FROM emp e JOIN dept d ON e.deptno=d.deptno;
+
+	SELECT * FROM view_e_d;
+
+	--修改7369员工的工资和奖金
+	UPDATE view_e_d SET sal=1000,comm=1000 WHERE empno=7369;
+	--修改7369员工的工资和部门名称（不允许直接修改）
+	--UPDATE view_e_d SET sal=1000,dname='销售部' WHERE empno=7369;
+
+   2.物化视图：materialized view
+     作用：提高查询效率
+	 
+	 特点：1.物化视图是一张实表，也就是说物化视图中保存数据的，占用实际的物理空间，相当于一张表的副本。
+	       2.物化视图只允许进行查询操作，不允许进行增删改操作。
+	
+     使用场景：1.如果要经常从远程的一个服务器中获取数据，则可以在本地创建一个远程服务器表的物化视图，做到定时同步数据，在本地查询的时候
+	 就直接查询本地的物化视图，进而提高查询效率。
+	           2.如果要经常基于某一张表关联的结果进行查询操作，则可以将表关联的结果创建成一张物化实体，来提高查询效率。
+	
+    创建语法：
+	  create materialized view 视图名
+	  [build immediate |build deferred]
+	  [refresh fast|complete|force]
+	  [on commit|demand]
+	  [start with 第一次同步的时间 next 时间间隔]
+	  [with primary key|rowid]
+	  as
+	  select 语句;
+	  
+	  相关参数：
+	  1.build immediate：用来设置物化视图创建好之后立刻同步数据（默认）
+	    build deferred：创建号物化视图之后不会立刻同步数据，需要手动同步数据
+	  2.refresh ：设置物化视图的同步方式
+	        fast：快速同步（增量同步，每次只同步发生变化的数据）
+			complete：全量同步（每次将物化视图中的数据全部删除，然后全部添加）
+			force：系统根据具体的情况来选择以上的两种方式
+	  3.on  ：设置同步时机
+	       commit：每次原表提交事务的时候会同步物化视图（只适用于同一个数据库系统中）
+	       demand：需要手动同步数据。
+		   需要使用程序包中的refresh存储过程：dbms_mview.refresh('物化视图名','C|F')
+		   
+	  4.start with 第一次同步的时间 next 时间间隔：定时同步数据
+	  
+	  5.with primary key|rowid：快速同步数据的参考列（默认为primary key）
+
+	
+	   --创建一个物化视图，用来保存部门表信息
+	CREATE MATERIALIZED VIEW mv_dept 
+	AS 
+	SELECT * FROM dept;
+
+	SELECT * FROM mv_dept;
+	--添加数据
+	INSERT  INTO dept VALUES(80,'zzz','mmmmmm');
+	--手动同步数据
+	BEGIN
+	  dbms_mview.refresh('mv_dept','C');
+	END;
+		
+	--创建一个物化视图，用来保存部门表信息,一开始并不需要同步数据
+	CREATE MATERIALIZED VIEW mv_dept1 
+	BUILD DEFERRED 
+	REFRESH COMPLETE
+	ON COMMIT
+	AS 
+	SELECT * FROM dept;
+	SELECT * FROM mv_dept1;
+	--手动同步数据
+	BEGIN
+	  dbms_mview.refresh('mv_dept1','C');
+	END;
+	--添加数据
+	INSERT  INTO dept VALUES(81,'dddd','tttttt');
+	--提交事务
+	COMMIT;
+  
+    --创建一个物化视图，用来保存部门表信息,每隔一分钟同步一次数据
+	CREATE MATERIALIZED VIEW mv_dept2 
+	REFRESH COMPLETE
+	START WITH SYSDATE NEXT SYSDATE+1/24/60
+	AS 
+	SELECT * FROM dept;
+
+	SELECT * FROM mv_dept2;
+	--添加数据
+	INSERT  INTO dept VALUES(82,'hhhhh','jjjjjjj');
+
+   物化视图中快速同步数据：
+   前提条件：如果要实现快速同步，则必须要在原表上提供一个视图日志，用来记录新增，修改或者是删除的数据，
+            并且还要保证原表必须要有主键。
+	视图日志：用来记录新增，修改或者是删除的数据主键或者是rowid.
+	
+	创建视图日志的语法：
+	   create materialized view log on 表名[with primary key|rowid];
+	   注意：1.一张表中只能有一个视图日志，视图日志的名称是由系统自动设置，名称的格式为：mlog$_表名
+	         2.在创建视图日志的时候with 后面的关键字必须要和创建物化视图的保持一致，如果都是primary key则可以省略。
+			 3.原表必须要由主键。
+	   
+	--创建一个视图日志在dept表中
+	CREATE MATERIALIZED VIEW LOG ON dept;
+
+
+  删除视图日志：
+    drop materialized view log on 表名;
+    DROP MATERIALIZED VIEW LOG ON dept;
+  删除物化视图：
+    drop materialized view 视图名;
+    DROP MATERIALIZED VIEW mv_dept1;
+	
+  
+
+  
+2.序列：
+   数据库中的一个对象，主要是用来生成一些列不重复的数字，在数据库中序列可以作为生成主键的一种方式。
+   关键字：sequence
+   创建语法：
+    create sequence 序列名
+	[start with n]   --设置序列的开始位置，默认为1
+	[increment by n] --设置序列每一次增长的步长，默认为1
+	[minvalue n] --设置最小值    默认为1
+	[maxvalue n] --设置最大值    默认是9999999999999999999999999999
+	[cache n| no cache]  --设置缓存的大小    默认20
+   
+   --创建一个默认序列：
+	CREATE SEQUENCE seq_2;
+
+	--创建一个序列，增量10
+	CREATE SEQUENCE seq_3
+	START WITH 10
+	INCREMENT BY 10
+	MINVALUE 10
+	MAXVALUE 100000000000000000000
+	CACHE 10
+	   
+   序列中有两个属性：
+     1.nextval:产生一个序列号
+	 2.currval:返回当前的序列号
+   
+   查询当前的序列号
+    select  序列名.currval from dual;
+	注意：如果创建的序列没有调用nextval来产生序列号则不允许使用该属性，否则报错。
+   返回一个序列号
+    select  序列名.nextval from dual;
+   
+    --查询当前的序列号
+	SELECT seq_2.currval FROM dual;
+
+	--产生一个数字
+	SELECT seq_2.nextval FROM dual;
+	
+	INSERT INTO good VALUES(seq_3.nextval,'qq');
+	   
+
+3.触发器：
+  关键字：trigger
+  是数据库中的一个对象，也是一个命名的一个PL/SQL块，可以将触发器当作是一个特殊的存储过程，
+  存储过程是由用户自己调用，但是触发器会按照设置好的触发事件和触发时机来由系统自己调用。
+  作用：
+     1.可以通过触发器来记录一些日志。
+	 2.可以自动完成一些主键自增长，数据自动更新等功能。
+	 3.可以实现一些复杂视图的增删改操作。
+	 ........
+  触发器分类：
+    1.语句级别触发器：
+	   表的触发器：
+	   用户触发器：
+	2.行级触发器：
+	   行级触发器： 
+	   替换触发器：
+
+    创建触发器的语法：
+	create or replace trigger 触发器名 
+	before|after|instead of 
+	触发事件
+	on 表名|视图名|用户模式
+	[for each row]   --行级触发器需要设置的选项
+	[declare
+	 声明变量等......
+	]
+	begin
+	  触发器要执行的代码
+	end [触发器名];
+	
+   注意：1.触发器没有参数
+         2.触发器没有is关键字，如果要定义变量则需要使用declare关键字。
+		 
+		 
+	参数说明：
+	 1 .触发时机
+	     before：前置触发器，在触发事件执行之前触发
+		 after：后置触发起，在触发事件执行之后触发
+		 instead of ：替换触发器，只适用于视图
+	 2.触发事件：在执行一些什么操作的时候会触发触发器
+	    insert   update  delete  create  drop   alter .......
+     3.for each row:行级触发器需要设置的参数
+	 
+	 
+	1.语句级触发器：触发器执行次数和sql语句的条数有关系，有多少条sql语句则触发器就会执行多少次。
+	   表或视图的触发器：主要就是用来监控一张表的一些操作。
+	   --创建一个触发器，监控good表的操作情况，将他的操作写入到一张日志表中
+		--创建一张日志表
+		CREATE TABLE good_log(oper_type VARCHAR2(20),oper_date DATE);
+		--创建触发器
+		CREATE OR REPLACE TRIGGER tri_good
+		BEFORE 
+		INSERT OR UPDATE OR DELETE 
+		ON good
+		--声明变量
+		DECLARE
+		oper_type VARCHAR2(20);
+		BEGIN
+		  --判断当前的操作类型
+		  IF inserting THEN
+			oper_type:='插入';
+		  ELSIF updating THEN
+			oper_type:='更新';
+		  ELSIF deleting THEN
+			oper_type:='删除';
+		  END IF;
+		  --将数据添加到日志表
+		  INSERT INTO good_log VALUES(oper_type,SYSDATE);
+		END;
+
+		SELECT * FROM good;
+		--删除数据
+		DELETE FROM good WHERE ID>50;
+	   用户触发器：主要就是用来监控一个用户模式中的所有的对象的状态。
+	   --编写一个用户触发器，用来监控scott用户下面的所有的对象的操作，并且将数据记录到日志表中。
+		CREATE TABLE user_log1(
+		 oper_type VARCHAR2(20),
+		 oper_object VARCHAR2(100),
+		 oper_event VARCHAR2(20),
+		 oper_date DATE,
+		 oper_user VARCHAR2(20)
+		);
+		--创建触发器
+		CREATE OR REPLACE TRIGGER tri_user
+		AFTER
+		CREATE OR ALTER OR DROP OR TRUNCATE
+		ON scott.schema      --schema代表的是用户模式
+		BEGIN
+		  --添加数据
+		  INSERT INTO user_log1 VALUES(
+			   ora_dict_obj_type,---记录的是操作的对象类型
+			   ora_dict_obj_name,--记录操作的对象的名称
+			   ora_sysevent,--记录当前操作的事件
+			   sysdate,
+			   ora_login_user  --记录当前登录的用户   
+		  );
+		END;
+		
+	2.行级触发器：触发器执行的次数和sql语句影响的行数有关。
+	   行级触发器中关键字：
+	     :new    代表新的一行数据，包含新的一行数据中的所有的列，如果要访问其中的某一列语法：   :new.列名  
+		 :old    代表旧的一行数据，包含了旧的一行数据中的所有的列，如果要访问其中的某一列语法：   :old.列名  
+		 
+		 注意：1.:new关键字只能使用在insert或者是update中
+		       2.:old关键字只能在update或者delete中
+	
+	
+	   普通行级触发器： 
+	    
+		--编写一个触发器实现good表中主键自增长的功能
+		CREATE OR REPLACE TRIGGER tri_insert 
+		BEFORE 
+		INSERT
+		ON good
+		FOR EACH ROW
+		  BEGIN
+			--生成一个序列添加到新的一行数据的主键位置
+			--:new.id:=seq_3.nextval;
+			SELECT seq_3.nextval INTO :new.id FROM dual;
+		END;
+
+		--添加数据
+		INSERT INTO good(NAME) VALUES('qq');
+		SELECT * FROM good;
+	   
+	   --编写一个触发器，监控部门表中删除的每一行数据，将删除的数据打印出来
+		CREATE  OR REPLACE TRIGGER tri_delete
+		AFTER 
+		DELETE
+		ON dept
+		FOR EACH ROW
+		  BEGIN
+			dbms_output.put_line('删除的数据：'||:old.deptno||','||:OLD.dname||','||:old.loc);
+		 END;
+
+		SELECT * FROM dept;
+		DELETE FROM dept WHERE deptno>=80;
+		DELETE FROM dept WHERE deptno >20 AND deptno<30;
+	  
+	   
+	   替换触发器：转换用来修改复杂视图，属于行级触发器。
+	      注意：替换触发器只能用来操作视图，不能用来操作表。
+	   
+	   --修改7369员工的工资和部门名称（不允许直接修改）
+		--UPDATE view_e_d SET sal=1000,dname='销售部' WHERE empno=7369;
+		--编写一个替换触发器来修改视图中多张基表的数据
+		CREATE OR REPLACE TRIGGER tri_instead
+		INSTEAD OF
+		UPDATE
+		ON view_e_d
+		FOR EACH ROW
+		  BEGIN
+			--修改员工表工资
+			UPDATE emp SET sal=:new.sal WHERE empno=:new.empno;
+			--修改部门表名称
+			UPDATE dept SET dname=:new.dname WHERE deptno=:new.deptno;
+		END;
+
+		UPDATE view_e_d SET sal=1000,dname='销售部' WHERE empno=7369;
+		SELECT * FROM view_e_d ;
+		
+		--编写一个触发器，将dept表中的修改信息记录下来
+		CREATE OR REPLACE TRIGGER tri_update
+		AFTER
+		UPDATE
+		ON dept
+		FOR EACH ROW
+		  BEGIN
+			dbms_output.put_line('修改前：'||:old.dname||',修改后：'||:new.dname);
+		 END;
+
+		SELECT * FROM dept;
+		UPDATE dept SET dname='销售部' WHERE deptno=11;
+		
+		
+		--编写一个触发器，在修改user_t表的同时将user_t1表中的对应的数据也修改为最新的数据
+		CREATE OR REPLACE TRIGGER tri_t
+		AFTER
+		UPDATE
+		ON User_T
+		FOR EACH ROW
+		  BEGIN
+			UPDATE user_t1 SET NAME=:new.name,age=:new.age,last_date=:new.last_date WHERE ID=:new.id;
+		 END;
+
+		--修改user_t中的数据
+		UPDATE user_t SET NAME='小白白' WHERE ID=4;
+	   
+	   
+Oracle中获取随机数：
+  函数：dbms_random.value[(n,m)]:默认产生的0-1之间的随机小数,也可以通过n,m来设置产生的随机数区间，但是依旧是小数。
+  
+  如果要随机获取表中的n条数据则可以使用一下的方式:
+  select * from(select * from 表 order by dbms_random.value);
+  

@@ -1,0 +1,438 @@
+1.命名Pl/SQL块（重要）
+  将匿名的PL/SQL块设置一个名称，然后作为数据库中的一个对象保存到数据库中，然后在后续使用的过程中，直接通过名称进行调用。
+  好处：
+     1.提高代码的重用性。
+	 2.提高程序的执行效率。
+  
+   常见的命名PL/SQL块有：函数    存储过程    触发器     程序包
+   
+   1.自定义函数：
+     主要使用场景：如果要经常统计或者是计算某一个数据，最后要将统计或者计算的结果返回则可以选择使用自定义函数。
+	 
+	 关键字：function
+	 创建语法：
+	   create [or replace] function 函数名[(参数列表)] return 返回的数据的数据类型
+	   is
+	   [声明变量
+	   声明游标
+	   ......]
+	   begin
+	    函数要实现的功能代码
+		return 返回的数据
+	   [exception
+	     .........
+	   ]
+	   end [函数名];
+	 
+	 
+	 注意：1.函数必须要返回一个值，并且只能返回一个值，并且在声明的时候使用return关键字来设置返回的数据的数据类型。
+	       2.如果函数需要声明内容，直接写在is关键字后面，需要使用declare
+		   3.函数功能代码结束之后，必须要通过return关键字将所要返回的数据进行返回，否则报错。
+   
+   
+    --编写一个函数，计算20号部门的员工平均工资
+	CREATE OR REPLACE FUNCTION fun_avg_sal 
+	RETURN NUMBER
+	IS
+	--声明变量
+	avg_sal NUMBER;
+	BEGIN
+	  --计算平均工资
+	  SELECT avg(sal) INTO avg_sal FROM emp WHERE deptno=20;
+	  --返回数据
+	  RETURN avg_sal;
+	END fun_avg_sal;
+	
+	
+	函数调用：1.直接使用select语句进行调用
+	           语法：select 函数名[(参数值,....)] from dual;
+			   --调用函数
+				SELECT fun_avg_sal FROM dual;
+			  2.在PL/SQL块中调用
+			    步骤：1.定义一个变量来接受函数返回的数据
+				      2.在PL/SQL块中使用函数名进行调用，将直接结果赋值给变量
+					     赋值方式可以使用":="也可以使用select ...into
+			    --使用PL/SQL块调用
+				DECLARE
+				 avg_sal NUMBER;
+				 BEGIN
+				   --avg_sal:=fun_avg_sal;
+				   SELECT fun_avg_sal INTO avg_sal FROM dual;
+				   dbms_output.put_line(avg_sal);
+				 END;
+				 
+	函数参数：
+	  参数语法：........函数名(参数名 数据类型 [default 默认值],参数名  数据类型 [default 默认值],.......)
+	  注意：一般情况下，函数在定义的时候有几个参数，调用的时候就需要传入几个参数，并且数据类型也需要一一对应，但是如果设置默认值则可以不传参数。
+	  
+	  函数传参的方式：
+	    形参：形式参数，在函数定义的时候声明的参数叫做形参
+		实参：实际参数，在函数调用的时候实际传入的参数的值，叫做实参。
+		
+	   --编写一个函数，传入两个数字和一个运算符，计算结果
+		CREATE OR REPLACE FUNCTION fun_jisuan(a NUMBER,oper VARCHAR2 DEFAULT '+',b NUMBER )
+		RETURN NUMBER
+		IS
+		--定义变量保存计算结果
+		res NUMBER;
+		BEGIN
+		  CASE oper 
+			WHEN '+' THEN res:=a+b;
+			WHEN '-' THEN res:=a-b;
+			WHEN '*' THEN res:=a*b;
+			WHEN '/' THEN res:=a/b;
+		   END CASE;
+		   --返回数据
+		   RETURN res;
+		END fun_jisuan;	
+		
+		
+	  有3种传参方式：
+	     1.按照形参的位置进行传参：传参的时候实参的顺序必须要和形参的顺序一一对应。  （推荐使用）
+		 --按照位置传参-----调用
+		  SELECT fun_jisuan(3,'+',5) FROM dual;
+		  
+		  注意：如果使用位置传参，则除非后面的参数又默认值可以省略，如果中间又默认值，后面没有默认值则不允许省略。
+		  建议：尽量在编写函数的时候，将有默认值的参数写在参数列表的后面，方便传参。
+		 
+		 2.按照形参的名称进行传参：传参的时候实参的值按照形参的名称进行设置
+		    语法：形参名=>实参
+			--按照名称传参
+			SELECT fun_jisuan(a=>7,b=>2,oper=>'-') FROM dual;
+		 3.混合传参：既有位置传参，又有名称传参
+		   --混合传参
+			SELECT fun_jisuan(7,b=>2,oper=>'-') FROM dual;
+			--下面的传参方式错误
+			--SELECT fun_jisuan(b=>7,'-',a=>9) FROM dual;
+			注意：在使用混合传参，只能前面用位置，后面用名字，不能反过来，否则报错。
+			
+    删除函数：
+	   语法：drop function 函数名;
+	   --删除函数
+		DROP FUNCTION fun_emp;
+
+
+
+    2.存储过程：(非常重要)
+	  是数据库种一个对象，在实际工作中使用非常广泛。
+	  关键字：procedure
+	  语法：create [or replace] procedure 过程名[(参数列表)]
+	        is
+			[各种声明]
+			begin
+			  过程种需要执行的代码
+			[exception
+			  异常处理的代码
+			]
+			end [过程名]
+			
+		注意：存储过程种不需要使用return来返回数据，所以在声明的时候不用写return
+		      在创建函数或者存储过程的时候仅仅是对语法语义进行检查，并不会执行其中的代码，只有在调用的时候才会执行。
+			
+		--编写一个存储过程，向部门表种添加数据
+		CREATE OR REPLACE PROCEDURE pro_insert_emp(dno NUMBER,d_name VARCHAR2,d_loc VARCHAR2)
+		IS
+		BEGIN
+		  --添加数据
+		  INSERT INTO dept VALUES(dno,d_name,d_loc);
+		END pro_insert_emp;	
+		
+		存储过程调用：
+		   方式一：使用PL/SQL调用
+			--调用存储过程
+			BEGIN
+			  pro_insert_emp(81,'aaa','wwwww');
+			END;
+		   
+		   方式二：使用call 关键字调用
+		    语法：call 过程名([参数列表])
+		   --调用存储过程
+			CALL pro_insert_emp(81,'aaa','wwwww');
+			
+	    注意：在使用call进行调用存储过程的时候如果存储过程没有参数，则不能省略().
+		    方式三：使用sqlplus在命令窗口调用
+			     语法：execute|exec  存储过程名[(参数值)]
+				 
+				 
+	  参数模式：
+	     存储过程种有三种模式的参数：
+		  1.in 模式：输入参数
+		     特点：参数的值只能在调用的时候通过外面传入程序内部，并且在程序内部不允许进行修改。
+			 语法：参数名 [in] 数据类型 [default 默认值]
+			 
+			 注意：in可以省略，因为默认就是输入参数。
+		  
+		  
+		  2.out 模式：输出参数
+		     特点：参数的值必须要在程序内部被赋值，不能从外面传入，相当于函数中的return，主要就是用来返回数据
+			      在存储过程中可以返回多个数据。
+				  语法：参数名 out 数据类型
+				  注意;输出参数没有默认值，并且out不能省略
+				  
+				  
+		  --编写一个存储过程，计算某一个部门的员工平均工资
+			CREATE OR REPLACE PROCEDURE pro_avg_sal(dno IN NUMBER,AVG_sal OUT NUMBER)
+			IS
+			BEGIN
+			  --计算平均工资
+			  SELECT avg(sal) INTO avg_sal FROM emp WHERE deptno=dno;
+			END;
+
+			--调用
+			DECLARE
+			 avg_sal NUMBER;
+			 BEGIN
+			   pro_avg_sal(20,avg_sal);
+			   dbms_output.put_line(avg_sal);
+			END;
+						
+
+		--编写一个存储过程，输入一个员工的编号，输出该员工的姓名和工资
+			CREATE OR REPLACE PROCEDURE pro_select_emp(eno IN NUMBER,e_name OUT VARCHAR2,e_sal OUT NUMBER)
+			IS
+			BEGIN
+			  --查询数据
+			  SELECT ename,sal INTO e_name,e_sal FROM emp WHERE empno=eno;
+			END;
+
+			--执行
+			DECLARE
+			 e_name emp.ename%TYPE;
+			 e_sal emp.sal%TYPE;
+			 BEGIN
+			   pro_select_emp(7369,e_name,e_sal);
+			   dbms_output.put_line(e_name||','||e_sal);
+			END;
+
+	
+		  
+		  3.in out 模式：输入输出参数
+		     特点：参数的值既可以从程序外面输入，也可以在程序内部进行修改并且输出。
+			 语法：参数名 in out 数据类型
+			 
+			 注意：输入输出参数不允许有默认值
+			 --输入一个员工的姓名，然后输出职位
+			CREATE OR REPLACE PROCEDURE pro_emp(s IN OUT VARCHAR2)
+			IS
+			BEGIN
+			  SELECT job INTO s FROM emp WHERE ename=s;
+			END;
+
+			--调用
+			DECLARE
+			 s VARCHAR2(20);
+			 BEGIN
+			   s:='KING';
+			   pro_emp(s);
+			   dbms_output.put_line(s);
+			END;
+						 
+		  
+	删除存储过程：
+      drop procedure 过程名称;	
+		  
+		  
+			--删除存储过程
+		DROP PROCEDURE pro_emp;	  
+		  
+	面试题：存储过程和函数区别？
+        1.定义的关键字不一样
+          函数使用function   存储过程使用procedure
+        2.数据的返回方式不一样
+          函数只能通过return来返回数据，并且只能返回一个数据
+          存储过程是通过out参数来返回数据，可以返回任何数量的数据，0个或者多个。
+        3.调用方式不一样：
+          函数可以使用select语句进行调用，但是存储过程不允许使用select语句调用
+          存储过程可以使用call调用，但是函数不可以。
+        4.参数模式： 
+          函数只有一种模式的参数：输入参数
+          存储过程有三种模式的参数：输入，输出，输入输出	
+        5.使用场景：
+          函数经常用将一些公共的一些计算操作封装成一个函数，用来返回一个唯一的结果。
+          主要是进行一些日常的业务数据的处理，例如：数据开发过程中的ETL操作。		  
+		  
+		  
+		    
+		    
+	自定义数据类型：
+      1.只能在一个PL/SQL块中使用
+         type 类型名  is table of |recored|ref cursor ......;
+	  2.将类型作为一个数据库的对象保存到数据库中，在数据库中可以被duoge PL/SQL块共享。
+        创建一个表类型：
+        create [or replace] type 类型名 is table of 数据类型|对象
+		
+		--定义一个表类型，该表类型中只有一列数据，数据类型为number
+		CREATE OR REPLACE TYPE type_t IS TABLE OF NUMBER;
+		--编写一个函数，返回指定部门的员工的工资
+		CREATE OR REPLACE FUNCTION fun_sals(dno NUMBER) RETURN type_t
+		IS
+		--声明一个表类型变量
+		sals type_t;
+		BEGIN
+		  SELECT sal BULK COLLECT INTO sals FROM emp WHERE deptno=dno;
+		  RETURN sals;
+		END;  
+		  
+		调用返回值为表类型的函数：
+         select * from table(函数名(参数值))		
+		 --调用返回值为表类型的函数调用方式
+		SELECT * FROM TABLE(fun_sals(20));
+		
+		--.请用PL/SQL编程实现一个字符串拆分函数。函数及返回值类型定义如下:
+		--type arrytype is table of varchar2(4000):
+		--function func_split(i_SourceStr in varchar2,i Separator invarchar2)return arrytype;。其中:
+		--1)i_SourceStr:待拆字符串
+		--2)i_Separator:分隔符
+		--实现按照指定的分割符串拆分字符的功能。
+
+
+		--定义一个表类型
+		CREATE OR REPLACE TYPE arrtype IS TABLE OF VARCHAR2(4000);
+		--编写函数
+		CREATE OR REPLACE function func_split(i_SourceStr in varchar2,i_Separator IN varchar2)
+		RETURN arrtype
+		IS
+		--声明一个表类型变量
+		arrs arrtype;
+		BEGIN
+		  SELECT regexp_substr(i_SourceStr,'[^'||i_Separator||']+',1,LEVEL) BULK COLLECT INTO arrs
+		   FROM dual 
+		  CONNECT BY LEVEL<=regexp_count(i_SourceStr,'\'||i_Separator)+1;
+		  --返回数据
+		  RETURN arrs;
+		END;
+
+		--调用
+		SELECT * FROM TABLE(func_split('qqqq*wwww*eeee*rrr','*'));
+		
+	如果要返回多列多行数据步骤：
+	1.则必须要先创建一个Object类型，来定义要返回的列数
+     create or replace type 对象名 as object(列名 数据类型,列名 数据类型,......);
+	 2.创建表类型
+	    create or replace type 类型名 is table of 对象名;
+	 
+	 3.在使用的时候需要使用对象名对查询出来的数据进行封装然后bulk collect into 表类型变量中	   
+	  SELECT 对象名(列名,列名,...) BULK COLLECT INTO 表类型变量 FROM 表名;
+    
+    --定义对象类型
+	CREATE OR REPLACE TYPE obj_emp AS OBJECT(ename VARCHAR2(20),sal NUMBER);
+	--定义一个表类型
+	CREATE OR REPLACE TYPE emp_type IS TABLE OF obj_emp;
+	--编写函数，返回emp表中姓名和工资
+	CREATE OR REPLACE FUNCTION fun_emp_1 RETURN emp_type
+	IS
+	emps emp_type;
+	BEGIN
+	  SELECT obj_emp(ename,sal) BULK COLLECT INTO emps FROM emp;
+	  RETURN emps;
+	END;
+
+	--调用
+	SELECT * FROM TABLE(fun_emp_1);	
+	
+	
+	
+	
+	在实际的工作过程中存储过程的使用：
+	主要就是对数据仓库中的数据进行抽取，转换，加载（ETL）等等。
+	
+	数据ETL策略|数据抽取策略：
+	 ETL策略主要分为两大类：
+	 1.抽取策略：
+	    主要考虑：如何减少对业务系统的影响。
+		常见的抽取策略主要分为3种：
+		  1.抽取方式：
+		     1.全量抽取：最简单的一种抽取方式，但是最消耗资源的方式，将原表种的数据全部查询过来。
+			   使用场景：1.一般数据量比较小的表可以进行全量抽取，例如：商品表等等。
+			             2.在系统种一般不发生变化的一些表，例如：地区表等等
+			 2.增量抽取：抽取的时候会抽取到新增和修改的数据。
+			    使用场景：如果表的数据量比较大，并且新增比较频繁或者经常会发生变化。例如：订单表
+			 3.新增抽取：每次只抽取新增的数据	
+			    使用场景：流水性质的一些表建议使用新增，因为这一类表数据量比较大，并且表种的数据只会新增。例如：流水表   日志表 等等
+		      
+			注意：在进行增量和新增抽取的时候一般都使用日期来进行过滤
+			  
+		  
+		  2.抽取周期：小时   天    周   月   季度。。。。
+		     抽取周期选择要取决于业务实时性要求，一般情况下周期越短，成本越高。   一般比较常用的是按照天
+		  3.抽取时机：
+		     主要是由抽取周期决定，尽量选择业务系统比较空闲的时候。
+	 
+	 
+	 
+	 2.加载策略：
+	    主要考虑的因素：考虑是否对目标表中的现有数据造成印象，例如：保证数据的完整性，重复执行之后要保证状态是一致的。
+		加载策略主要由4种：
+		1.直接追加：将抽取过来的数据直接增加到目标表中。
+		          使用场景：对于抽取方式为新增抽取的可以使用直接追加。
+				  
+				  使用语句：insert into ......
+				  
+				  
+		2.直接覆盖：将目标表中的数据全部删除，然后在将抽取过来的数据添加。
+		          使用场景：抽取方式为全量，并且不要求记录数据的历史信息，则可以使用直接覆盖。
+				  使用语句：truncate 来清除数据
+				            insert into加载数据
+
+		
+		3.更新追加：将抽取过来的数据和目标表中的数据进行对比，如果已经存在的则需要修改，否则需要进行新增。
+		          使用场景：抽取方式如果是增量抽取，并且不需要保留历史数据，则可以使用更新追加。
+				  使用语句：merge into
+		4.历史表加载：
+		      1.全量抽取过来的数据全部保留。（只适用于数据量比较小的情况）----------------全量抽取
+			    使用语句： insert  into...
+			  2.使用拉链表来保存历史数据。（适用于数据量比较大，并且要求保留历史数据的情况）------------------增量抽取
+			    使用语句：
+				      merge into ...
+					  insert into ....
+					  
+					  
+					  
+merge into:经常会使用在对数据进行同步，也就是原表和目标表进行对比更新
+语法：merge into 目标表 t  using 原表|(select语句) s on (关联条件)  
+      when matched then
+	    --当匹配到的时候要执行的操作（更新|删除）
+		update set t.列名=s.列名,......[where  过滤条件]
+		[delete where 过滤条件]
+	   when not matched then
+	     --当不匹配的时候执行操作（插入）
+		 insert values(s.列名,s.列名,.......);
+		 
+		MERGE INTO user_t1 t USING user_t s ON (t.id=s.id)
+		WHEN MATCHED THEN
+		  UPDATE SET t.name=s.name,t.age=s.age,t.last_date=s.last_date
+		  DELETE WHERE t.ID=3
+		WHEN NOT MATCHED THEN
+		  INSERT VALUES(s.id,s.name,s.age,s.last_date);
+  
+  注意：1.关联条件必须要使用小括号
+        2.delete语句必须要配合update一起使用，不能单独使用。
+		3.metched和not matched不一定必须都要出现，可以只出现其中的一个。
+		
+		
+		CREATE TABLE DICTA(
+       ID NUMBER,
+       DESC1 VARCHAR2(10)
+);
+
+INSERT INTO DICTA VALUES(1001, '基金');
+INSERT INTO DICTA VALUES(2001, '保险');
+INSERT INTO DICTA VALUES(3001, '证券');
+INSERT INTO DICTA VALUES(3002, '信托');
+SELECT * FROM DICTA;
+
+CREATE TABLE DICTB(
+       ID NUMBER,
+       DESC1 VARCHAR2(10)
+);
+INSERT INTO DICTB VALUES(1002, '证券');
+INSERT INTO DICTB VALUES(3001, '银行');
+SELECT * FROM DICTB;
+
+--方式一：(建议)
+MERGE INTO dictb t USING dicta s ON (t.id=s.id)
+WHEN MATCHED THEN
+  UPDATE SET t.desc1=s.desc1;
+  
+ --方式二：
+UPDATE dictb t SET desc1=(SELECT desc1 FROM dicta WHERE t.id=ID) WHERE ID IN(SELECT ID FROM dicta);

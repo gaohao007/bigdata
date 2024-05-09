@@ -1,0 +1,196 @@
+1.层级使用场景：
+   1.构建组织架构：例如：员工和领导
+   2.使用递归来生成连续的数字或者日期
+   3.使用层级来对列中的数据进行拆分成多行
+     语法：
+	 select distinct regexp_substr(列名,'[^分隔符]+',1,level) from 表名 connect by level<=regexp_count(列名,'分割符')+1;
+	 
+	 
+注意：1.如果要将多行数据中的某一列合并成一列使用分隔符分开------------------group by + listagg
+      2.如果要将一行数据中的某一列按照指定的分割符拆分成多行----------------使用层级递归：connect by
+	  
+	  
+	--将一行数据拆分成多行
+WITH tmp AS(
+ SELECT 'aaa,sss,fff,ggg' s FROM dual
+)
+SELECT regexp_substr(s,'[^,]+',1,LEVEL) FROM tmp t CONNECT BY  LEVEL<=4;
+
+WITH tmp AS(
+ SELECT 'aaa,sss,fff,ggg' s FROM dual
+ UNION
+ SELECT 'zzzz,xxx,ccc' FROM dual
+)
+SELECT DISTINCT regexp_substr(s,'[^,]+',1,LEVEL) FROM tmp t CONNECT BY LEVEL<=regexp_count(s,',')+1;
+
+SELECT DISTINCT regexp_substr(ano,'[^,]+',1,LEVEL) FROM a1 CONNECT BY LEVEL<=regexp_count(ano,',')+1;
+
+SELECT * FROM a;
+
+
+--多行变一行
+SELECT bs,SUM(CASE WHEN win='胜' THEN 1 ELSE 0 END) 胜,
+          SUM(CASE WHEN win='负' THEN 1 ELSE 0 END)负 FROM a GROUP BY bs;
+
+--一行拆分成多行
+WITH tmp AS(
+SELECT bs,SUM(CASE WHEN win='胜' THEN 1 ELSE 0 END) 胜,
+          SUM(CASE WHEN win='负' THEN 1 ELSE 0 END)负 FROM a GROUP BY bs
+)
+SELECT bs,win FROM(
+SELECT DISTINCT bs,'胜' win,LEVEL FROM tmp CONNECT BY LEVEL<=胜
+UNION
+SELECT DISTINCT bs,'负' win,LEVEL FROM tmp CONNECT BY LEVEL<=负)
+
+
+--有一张用户存款余额表，数据如下
+/*
+  8-1    张三      1000
+  8-8    张三      8000
+  8-20   张三      5000
+
+*/
+--请计算出来张三8月份的日平均余额
+
+WITH tmp AS(
+SELECT b.*,LEAD(b_date,1,to_date('2023-9-1','yyyy-mm-dd')) OVER(ORDER BY b_date)-b_date 天数 FROM bal b)
+SELECT AVG(bal_amt) FROM(
+SELECT DISTINCT b_date+LEVEL-1 b_date,bal_amt FROM tmp t CONNECT BY LEVEL<=天数);
+
+--计算销售数据中每个月的环比和同比
+SELECT * FROM t_sales;
+
+--生成12个月份的日期
+WITH t AS(
+SELECT to_char(add_months(to_date('2023-2-1','yyyy-mm-dd'),LEVEL),'yyyy-mm') y_m FROM dual CONNECT BY LEVEL<=13)
+SELECT y_m,NVL(amount,0) amount,LAG(amount,1,0) OVER(ORDER BY y_m) 上月,
+ LAG(amount,12,0) OVER(ORDER BY y_m) 去年 FROM t LEFT JOIN t_sales s ON t.y_m=to_char(s_date,'yyyy-mm')
+
+
+create table user_profile(u_id integer primary key,device_id integer,gender VARCHAR2(10),age integer,channel varchar(20),active_days_within_30 integer,comment_cnt integer);
+insert into user_profile values(1,2578,'male',21,'微商城',9,12);
+insert into user_profile values(2,2563,'male','','美团外买',14,45);
+insert into user_profile values(3,2349,'female',20,'美团团购',14,64);
+insert into user_profile values(4,2949,'female',25,'微商城',19,36);
+insert into user_profile values(5,2622,'male',21,'美团外买',12,77);
+insert into user_profile values(6,2169,'female',25,'美团团购',10,7);
+insert into user_profile values(7,2900,'female',22,'美团外买',16,6);
+insert into user_profile values(8,2132,'male',28,'美团团购',16,55);
+SELECT * FROM user_profile;
+
+--算出每个渠道每种性别的用户数、30天内平均活跃天数和平均评论数量
+SELECT channel,gender, COUNT(DISTINCT device_id)用户数,
+AVG(active_days_within_30) 平均活跃天数,
+AVG(comment_cnt)评论次数
+ FROM user_profile GROUP BY channel,gender;
+
+
+-- 第二题：现在运营想要查看用户在某天浏览商城后第二天还会再来的概率。请你取出相应数据。
+/*
+create table comment_detail(c_id integer primary key,device_id integer,comment_cnt integer,c_date date);
+insert into comment_detail values(1,2138,12,to_date('2021/5/3','yyyy-mm-dd'));
+insert into comment_detail values(2,3214,46,to_date('2021/5/9','yyyy-mm-dd'));
+insert into comment_detail values(3,3214,64,to_date('2021/6/15','yyyy-mm-dd'));
+insert into comment_detail values(4,6543,36,to_date('2021/8/13','yyyy-mm-dd'));
+insert into comment_detail values(5,2315,77,to_date('2021/8/13','yyyy-mm-dd'));
+insert into comment_detail values(6,2315,7,to_date('2021/8/14','yyyy-mm-dd'));
+insert into comment_detail values(7,2315,6,to_date('2021/8/15','yyyy-mm-dd'));
+
+*/
+SELECT device_id,SUM(a)/COUNT(*) FROM(
+SELECT device_id,c_date,
+CASE when(c_date-LAG(c_date,1)OVER(PARTITION BY device_id ORDER BY c_date))=1 THEN 1 ELSE 0 END a 
+  FROM comment_detail) GROUP BY device_id ;
+
+
+create table total_price(t_id integer primary key,device_id integer,gender VARCHAR2(10),age integer,channel varchar(20),total_price integer);
+insert into total_price values(1,2138,'male',21,'微商城',775);
+insert into total_price values(2,3214,'male',null,'美团外卖',880);
+insert into total_price values(3,3214,'female',20,'美团团购',353);
+insert into total_price values(4,6543,'female',25,'微商城',955);
+insert into total_price values(5,2315,'male',21,'美团外卖',183);
+insert into total_price values(6,2315,'female',25,'美团团购',363);
+insert into total_price values(7,2315,'female',22,'美团外卖',183);
+insert into total_price values(8,2315,'male',28,'美团团购',531);
+--3. 题目：现在运营想要找到每个渠道成交金额最低的同学来做调研，请你提取数据
+--方式一：
+SELECT * FROM(
+SELECT t.*,RANK()OVER(PARTITION BY channel ORDER BY total_price) rn FROM total_price t)
+WHERE rn=1
+--方式二：
+SELECT * FROM(
+SELECT t.*,MIN(total_price)OVER(PARTITION BY channel) total_min FROM total_price t)
+WHERE total_price=total_min
+
+
+2.rownum和rowid
+  1.rownum:行号
+       每次查询数据的时候，默认市没有行号，如果要显示行号则需要使用关键字：rownum来产生一个行号
+	   行号使用场景：1.对表中的全部数据进行排名（如果真的排名推荐开窗排名）
+	                 2.分页查询数据
+					 
+		注意：rownum并不是存在表中，只是在查询的时候显示出来的一个行号，该行号是根据数据的随时会发生变化。
+		   1.如果要获取一个表中的前n条数据，则直接使用rownum<=n来进行过滤。
+		   2.如果要获取一个表中间行，则不能直接使用rownum between n and m来查询，必须要先将行号进行固定，然后再
+		     外面嵌套一层进行按照固定的行号进行过滤。
+
+		分页查询的语法：select * from (select a.*,rownum rn from 表名 a) where rn between 开始行号 and 结束行号
+		
+		--显示行号
+		SELECT e.*,ROWNUM FROM emp e;
+		--查询员工表中的前5行数据
+		SELECT * FROM emp WHERE ROWNUM<=5
+
+		--查询员工表中的6到10行数据
+		SELECT * FROM (
+		SELECT e.*,ROWNUM rn FROM  emp e) WHERE rn BETWEEN 6 AND 10
+		
+	2.rowid:伪列
+	   属于一个隐藏列，主要是用来保存每一行数据再磁盘上保存的物理地址，每添加一条数据，则系统就会给该条数据生成一个rowid保存到表中，
+	   rowid是唯一的，如果要显示rowid，则必须要再select语句中使用关键字rowid来显示。
+	   
+	   使用场景：可以使用rowid来删除表中的重复数据。
+	    思路：先按照所有的行进行分组，然后查询出最大的rowid或者是最小的rowid保留，将剩下其他的数据全部删除即可。
+		语法：delete from 表名 where rowid not in(select max(rowid) from 表名 group by 列名,列名,....)
+		    或者
+			  delete from 表名 a where not exists(select max(rowid) from 表名 group by 列名,列名,.... having max(rowid)=a.rowid)
+		--删除表中重复的数据
+		--使用 not in
+		DELETE FROM ROWID_t WHERE ROWID NOT IN(SELECT max(ROWID) FROM rowid_t r GROUP BY rid,rname);
+		--使用not exists
+		DELETE FROM rowid_t r WHERE NOT EXISTS
+		(SELECT  max(ROWID) FROM rowid_t  GROUP BY rid,rname HAVING r.rowid=MAX(ROWID));
+		
+		注意：使用rowid的目的是为了寻找重复的数据中不同列，如果表中的所有的列都是一样的则可以选择使用rowid，但是如果表中由一个列是唯一的，
+		则可以不用使用rowid,直接使用唯一的列进行去重。
+		
+		
+3.with临时表
+  with临时表相当于将一条sql语句的查询结果临时保存起来，当作一个表来使用。
+  作用：可以简化sql的编写，也可以提高sql可读性。
+  注意：with临时表只能再当前的sql语句中使用。
+  语法：
+     with 
+	   表名 as(
+	   select 语句
+	 ),表名 as(
+	   select 语句
+	 ),
+	 ......
+	 select * from 临时表。。。。
+	 
+	 注意：使用with临时表则后面必须要添加一个select语句。
+	 
+	 
+	 WITH tmp_t AS(
+SELECT device_id,c_date,
+CASE when(c_date-LAG(c_date,1)OVER(PARTITION BY device_id ORDER BY c_date))=1 THEN 1 ELSE 0 END a 
+  FROM comment_detail
+),tmp_a AS(
+  SELECT 'qq' FROM dual
+)
+SELECT device_id,SUM(a)/COUNT(*) FROM tmp_t GROUP BY device_id;
+
+
+
+	 

@@ -1,0 +1,286 @@
+/*create table T_prod(
+CUST_ID number,
+PROD varchar2(20),
+ATM number,
+CNT number);
+
+insert into T_prod values(1000100001,'A',100,2);
+insert into T_prod values(1000100001,'B',200,1);
+insert into T_prod values(1000100002,'B',200,4);
+insert into T_prod values(1000100003,'A',100,1);
+insert into T_prod values(1000100003,'B',200,2);
+*/
+--1)通过SQL代码实现，查询出同事持有A产品和B产品的客户
+--select * from t_prod;
+select cust_id from t_prod t where t.prod = 'A' and exists 
+(select cust_id from t_prod where prod = 'B' and t.cust_id = cust_id);
+--通过SQL代码实现，查询出只持有B产品的客户
+select cust_id from t_prod t where t.prod = 'B' and not exists 
+(select cust_id from t_prod where prod = 'A' and t.cust_id = cust_id);
+--通过sql将表1转化为如下的表
+--select * from t_prod;
+select cust_id,
+       SUM(case when prod = 'A'then atm * cnt
+			 else 0	end) A,
+			 SUM(case when prod = 'B'then atm * cnt
+			 else 0	end) B from t_prod group by cust_id;
+/*
+create table deli(
+       busi_date date,
+			 exch_time varchar2(50),
+			 pty_id varchar2(20),
+			 exch_type varchar2(20),
+			 prd_no varchar2(10),
+			 del_amt number
+);
+
+insert into deli values(to_date('20221201','yyyy-mm-dd'),'09:31:47.8116','cust001','买入股票','300801',10000);
+insert into deli values(to_date('20221202','yyyy-mm-dd'),'14:24:35.4329','cust002','买入股票','000713',8000);
+insert into deli values(to_date('20221203','yyyy-mm-dd'),'11:06:48.7018','cust002','买入股票','002513',5000);
+insert into deli values(to_date('20221204','yyyy-mm-dd'),'10:25:42.6437','cust001','卖出股票','300801',12000);
+insert into deli values(to_date('20221204','yyyy-mm-dd'),'13:37:25.4777','cust001','买入股票','000262',15000);
+insert into deli values(to_date('20221204','yyyy-mm-dd'),'09:28:55.1600','cust001','买入股票','300125',6000);
+insert into deli values(to_date('20221204','yyyy-mm-dd'),'14:12:13.1675','cust001','卖出股票','000262',14500);
+insert into deli values(to_date('20221205','yyyy-mm-dd'),'10:25:42.6437','cust001','卖出股票','300801',12000);
+insert into deli values(to_date('20221205','yyyy-mm-dd'),'13:37:25.4777','cust001','买入股票','000262',15000);
+insert into deli values(to_date('20221205','yyyy-mm-dd'),'09:28:55.1600','cust001','买入股票','300125',6000);
+insert into deli values(to_date('20221205','yyyy-mm-dd'),'14:12:13.1675','cust001','卖出股票','000262',14500);
+insert into deli values(to_date('20221206','yyyy-mm-dd'),'10:25:42.6437','cust001','卖出股票','300801',12000);
+insert into deli values(to_date('20221206','yyyy-mm-dd'),'13:37:25.4777','cust001','买入股票','000262',15000);
+insert into deli values(to_date('20221206','yyyy-mm-dd'),'09:28:55.1600','cust001','买入股票','300125',6000);
+insert into deli values(to_date('20221206','yyyy-mm-dd'),'14:12:13.1675','cust001','卖出股票','000262',14500);
+insert into deli values(to_date('20221207','yyyy-mm-dd'),'10:25:42.6437','cust001','卖出股票','300801',12000);
+insert into deli values(to_date('20221207','yyyy-mm-dd'),'13:37:25.4777','cust001','买入股票','000262',15000);
+insert into deli values(to_date('20221207','yyyy-mm-dd'),'09:28:55.1600','cust001','买入股票','300125',6000);
+insert into deli values(to_date('20221207','yyyy-mm-dd'),'14:12:13.1675','cust001','卖出股票','000262',14500);
+insert into deli values(to_date('20221208','yyyy-mm-dd'),'04:25:42.6437','cust001','卖出股票','300801',12000);
+insert into deli values(to_date('20221208','yyyy-mm-dd'),'18:37:25.4777','cust003','买入股票','000262',15000);
+insert into deli values(to_date('20221208','yyyy-mm-dd'),'09:28:55.1600','cust002','买入股票','300125',6000);
+insert into deli values(to_date('20221208','yyyy-mm-dd'),'12:12:13.1675','cust004','卖出股票','000262',14500);
+
+create table pty_info(
+       pty_id varchar2(20),
+			 pty_name varchar2(20),
+			 org_id number
+);
+
+
+insert into pty_info values('cust001','AAA',741);
+insert into pty_info values('cust002','BBB',852);
+insert into pty_info values('cust003','CCC',741);
+
+*/
+--提取2022年12月至2023年1月，每个月做过【买入股票]交易的客户名单:
+--展示字段:月份、客户编号(每个月同一个客户只显示一次)
+select * from deli;
+select * from pty_info;
+select  distinct to_char(busi_date,'mm') 月,pty_id 用户 from deli 
+where busi_date between to_date('2022-12','yyyy-mm') and to_date('2023-01','yyyy-mm');
+--计算2022年12月每个营业部所有客户【买入股票]的交易金额之和:
+--展示字段:营业部编号，交易金额
+select 部门,sum(金额) 总金额 from(select p.org_id 部门,del_amt 金额 from deli d 
+join pty_info p on d.pty_id = p.pty_id
+where busi_date between to_date('20221201','yyyy-mm-dd') and to_date('20221231','yyyy-mm-dd'))
+group by 部门;
+--计算每个客户在2022年12月每日第一个交易客户和最后一个交易客户的时间信息，如当天无交易则不计算;
+--展示字段:日期、第一个交易时间、第一个交易客户编号、最后交易时间、最后交易客户编号
+--ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'HH24:MI:SSXFF';
+select f.busi_date,first_t,first_id,last_t,last_id from (
+       select * from(
+					 select  
+					 busi_date,
+					 exch_time，
+					 pty_id first_id,
+					 min(exch_time)over(partition by busi_date) first_t
+					 from deli) where first_t = exch_time) f --每天第一个
+			 join (
+			 select * from(
+					 select  
+					 busi_date,
+					 exch_time，
+					 pty_id last_id,
+					 max(exch_time)over(partition by busi_date) last_t
+					 from deli) where last_t = exch_time) l --每天最后一个
+			 on f.busi_date = l.busi_date;
+
+--ALTER SESSION SET NLS_TIMESTAMP_FORMAT = 'YYYY-MM-DD HH24:MI:SSXFF';
+--select to_timestamp('2022-12-01 09:31:47.8116') from dual;
+/*
+select 日期,
+       listagg(f_t,'') within group(order by f_t) 第一位交易时间,
+       listagg(f_c,'') within group(order by f_c) 第一位交易客户,
+			 listagg(l_t,'') within group(order by l_t) 最后位交易时间,
+			 listagg(l_c,'') within group(order by l_c) 最后位交易客户
+from (select 日期,
+       case when 第一位 = 1 then to_char(et) else '' end f_t,
+			 case when 第一位 = 1 then 客户ID else '' end f_c,
+			 case when 最后一位 = 1 then to_char(et) else '' end l_t,
+			 case when 最后一位 = 1 then 客户ID else '' end l_c from 
+(with temp as(
+select busi_date 日期,pty_id 客户ID,to_timestamp(to_char(busi_date,'yyyy-mm-dd')||' '||exch_time) et from deli)
+select t.*,
+rank()over(partition by 日期 order by et) 第一位,
+rank()over(partition by 日期 order by et desc) 最后一位
+from temp t)) group by 日期;*/
+--提取出2022年12月每日交易金额前10的产品信息:
+--展示字段:日期、产品代码、交易量、排名
+select * from(
+select busi_date 日期,
+       prd_no 产品代码,
+       del_amt 交易量,
+       rank()over(partition by busi_date order by del_amt desc) 排名
+  from deli) where 排名 <= 10;
+--有一份手工更新的客户信息，存放在表3,
+--请用表3更新表2信息，更新逻辑如下:如客户表2
+--表3都有，营业部编号以表3为准，客户名称以表3为准;如客户表2有表3无，以表2信息为准:如客
+--户表2无表3有，以表3信息为准;
+/*
+create table pty_info_temp(
+       pty_id varchar2(20),
+			 pty_name varchar2(20),
+			 org_id number 
+);
+
+
+
+insert into pty_info_temp values('cust002','BBB',123);
+insert into pty_info_temp values('cust003','CCC',456);
+insert into pty_info_temp values('cust004','FFF',999);
+insert into pty_info_temp values('cust005','DDD',666); 
+*/
+
+select * from pty_info p 
+where not exists(select * from pty_info_temp where pty_id = p.pty_id)
+union
+select * from pty_info_temp;
+
+/*
+create table t03_card_trade_detail(
+       cust_id number,
+			 card_id number,
+			 org_name varchar2(10),
+			 amt number(15,2),
+			 txn_dt varchar2(50)
+);
+
+insert into t03_card_trade_detail values(6000121,622612010600001,'上海分行',100.00,'20120101');
+insert into t03_card_trade_detail values(6000121,622612010600001,'上海分行',100.00,'20120205');
+insert into t03_card_trade_detail values(6000121,622612010600001,'上海分行',200.00,'20120301');
+insert into t03_card_trade_detail values(6000122,622612010600002,'上海分行',1000.00,'20120201');
+insert into t03_card_trade_detail values(6000122,622612010600002,'上海分行',10000.00,'20120405');
+insert into t03_card_trade_detail values(6000122,622612010600002,'上海分行',20.00,'20120201');
+insert into t03_card_trade_detail values(6000123,622612010600003,'上海分行',123.00,'20120501');
+insert into t03_card_trade_detail values(6000123,622612010600003,'上海分行',142.00,'20120605');
+insert into t03_card_trade_detail values(6000123,622612010600003,'上海分行',2050.00,'20120701');
+*/
+--通过SQL语句计算2012年一年内，客户每月的消费总金额，请写出实现的SQL语句，查询结果格式如下
+-- Cust_id(客户号)----Month(月份)----Amt(消费金额)
+select cust_id 客户号,d 月份,sum(amt) 消费金额 from(
+select cust_id,card_id,org_name,amt,substr(txn_dt,5,2) d
+from t03_card_trade_detail) group by cust_id,d;
+/*
+create table t03_acct_trade_detail(
+       cust_id number,
+       acct_no number,
+       org_name varchar2(10),
+       amt number(15,2),
+       txn_dt varchar2(50),
+			 current_bal number
+);
+
+insert into t03_acct_trade_detail values(6000121,9000000001,'上海分行',100.00,'20120501',20000);
+insert into t03_acct_trade_detail values(6000121,9000000001,'上海分行',100.00,'20120701',20000);
+insert into t03_acct_trade_detail values(6000122,9000000002,'宁波分行',200.00,'20120701',30000);
+insert into t03_acct_trade_detail values(6000122,9000000003,'宁波分行',200.00,'20120701',30000);
+insert into t03_acct_trade_detail values(6000122,9000000004,'宁波分行',200.00,'20120701',30000);
+insert into t03_acct_trade_detail values(6000123,9000000005,'宁波分行',200.00,'20120701',30000);
+insert into t03_acct_trade_detail values(6000123,9000000006,'宁波分行',200.00,'20120701',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20120701',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20120801',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20120901',30000);
+
+
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',100.00,'20120601',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',100.00,'20120618',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',100.00,'20120613',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',300.00,'20120601',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',300.00,'20120621',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',300.00,'20120622',30000);
+insert into t03_acct_trade_detail values(6000125,9000000007,'宁波分行',500.00,'20120612',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',100.00,'20120613',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',100.00,'20120614',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',200.00,'20120615',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',500.00,'20120616',30000);
+
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20121201',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20121218',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20121201',30000);
+insert into t03_acct_trade_detail values(6000123,9000000007,'宁波分行',200.00,'20121221',30000);
+insert into t03_acct_trade_detail values(6000125,9000000007,'宁波分行',200.00,'20121211',30000);
+insert into t03_acct_trade_detail values(6000125,9000000007,'宁波分行',500.00,'20121212',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',500.00,'20121213',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',500.00,'20121214',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',500.00,'20121215',30000);
+insert into t03_acct_trade_detail values(6000124,9000000007,'宁波分行',500.00,'20121216',30000);
+
+
+*/
+--说明：客户余额计算口径：客户所有账户余额的总和（一个客户可能有多个账户），一个账户在一天最多只有一条交易记录
+
+--1）统计全行2012年7月累计的交易发生额和全行2012年7月末的账户余额（15分）
+select distinct 累计交易发生额,sum(余额)over()from(
+select current_bal 余额,
+       sum(amt)over() 累计交易发生额，
+       rank()over(partition by acct_no order by txn_dt desc) last_day 
+			 from t03_acct_trade_detail t 
+       where to_date(txn_dt,'yyyy-mm-dd') 
+       between to_date('20120701','yyyy-mm-dd') and to_date('20120731','yyyy-mm-dd'))
+			 where last_day = 1;
+
+
+--2）查询结果显示格式，请写出实现的SQL语句（10分）
+--Rank_cd(排名)---Org_name(所属分行)---Cust_id(客户行)---Current_bal(当前余额)
+select rank()over(order by current_bal desc) 排名,
+				org_name,
+				cust_id,
+				current_bal 
+				from t03_acct_trade_detail;
+
+--3）查询宁波分行每个客户在2012年6月累计发生额比2012年12月多10000的客户清单，输出格式如下（10分）
+--Cust_id(客户号)---Org_name(所属分行)---Amt06（201206发生额）---Amt12(201212发生额)
+select t6.cust_id,t6.org_name,amt6,amt12 from 
+       (select distinct cust_id,
+       org_name,
+       sum(amt)over(partition by cust_id) amt6 from t03_acct_trade_detail t 
+       where to_date(txn_dt,'yyyy-mm-dd') 
+       between to_date('20120601','yyyy-mm-dd') and to_date('20120630','yyyy-mm-dd')
+			 and org_name = '宁波分行') t6 
+       join 
+			 (select distinct cust_id,
+       org_name,
+       sum(amt)over(partition by cust_id) amt12 from t03_acct_trade_detail t 
+       where to_date(txn_dt,'yyyy-mm-dd') 
+       between to_date('20121201','yyyy-mm-dd') and to_date('20121230','yyyy-mm-dd')
+			 and org_name = '宁波分行') t12 
+			 on t6.cust_id = t12.cust_id
+			 where amt6 > amt12;
+
+/*
+create table stu(
+      s_no number,
+			s_name varchar2(10),
+			s_score number,
+			s_rank number
+);
+insert into stu values(1000,'张三',500,1);
+insert into stu values(1000,'小明',480,2);
+insert into stu values(1000,'王五',470,3);
+insert into stu values(1000,'小王',460,4);
+
+*/
+--输出
+--学号---姓名--总分--排名--前一名姓名--后一名姓名
+select s.*,
+       lag(s_name,1)over(order by s_rank),
+			 lead(s_name,1)over(order by s_rank) from stu s;
+			 
